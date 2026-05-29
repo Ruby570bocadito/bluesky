@@ -1,0 +1,44 @@
+{
+  "name": "demo_audit",
+  "created_at": "2026-05-28T22:27:21.519652",
+  "updated_at": "2026-05-28T22:27:21.571060",
+  "total_targets": 3,
+  "total_results": 5,
+  "successful_attacks": 4,
+  "failed_attacks": 1,
+  "targets": [
+    {
+      "mac": "00:1A:7D:DA:71:13",
+      "name": "iPhone 15 Pro",
+      "rssi": -55,
+      "first_seen": "2026-05-28T22:27:21.521407",
+      "last_seen": "2026-05-28T22:27:21.521438",
+      "services": [],
+      "vulnerabilities": []
+    },
+    {
+      "mac": "AC:3F:A4:12:34:56",
+      "name": "Sony WH-1000XM5",
+      "rssi": -72,
+      "first_seen": "2026-05-28T22:27:21.521472",
+      "last_seen": "2026-05-28T22:27:21.521485",
+      "services": [],
+      "vulnerabilities": []
+    },
+    {
+      "mac": "DC:0C:5C:78:90:AB",
+      "name": "Samsung Galaxy S25",
+      "rssi": -61,
+      "first_seen": "2026-05-28T22:27:21.521511",
+      "last_seen": "2026-05-28T22:27:21.521587",
+      "services": [],
+      "vulnerabilities": []
+    }
+  ],
+  "session": {
+    "name": "Demo Audit - Bluetooth Pentest",
+    "date": "2026-05-28",
+    "environment": "Linux",
+    "duration": "15m"
+  }
+}

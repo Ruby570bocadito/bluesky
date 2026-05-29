@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Módulos - Bluesky{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <h2><i class="bi bi-puzzle text-primary"></i> Módulos de Bluesky</h2>
+        <p class="text-muted">{{ modules|length }} módulos cargados</p>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="row mb-3">
+    <div class="col-md-4">
+        <input type="text" class="form-control" id="searchModules" placeholder="Buscar módulos..." value="{{ search }}">
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="severityFilter">
+            <option value="">Todas las severidades</option>
+            <option value="critical" {% if severity_filter == 'critical' %}selected{% endif %}>Crítico</option>
+            <option value="high" {% if severity_filter == 'high' %}selected{% endif %}>Alto</option>
+            <option value="medium" {% if severity_filter == 'medium' %}selected{% endif %}>Medio</option>
+            <option value="low" {% if severity_filter == 'low' %}selected{% endif %}>Bajo</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="typeFilter">
+            <option value="">Todos los tipos</option>
+            <option value="classic" {% if type_filter == 'classic' %}selected{% endif %}>Classic (BR/EDR)</option>
+            <option value="ble" {% if type_filter == 'ble' %}selected{% endif %}>BLE</option>
+            <option value="both" {% if type_filter == 'both' %}selected{% endif %}>Ambos</option>
+            <option value="android" {% if type_filter == 'android' %}selected{% endif %}>Android</option>
+        </select>
+    </div>
+    <div class="col-md-2">
+        <button class="btn btn-outline-primary w-100" onclick="applyFilters()">
+            <i class="bi bi-funnel"></i> Filtrar
+        </button>
+    </div>
+</div>
+
+<!-- Module Grid -->
+<div class="row g-3" id="moduleGrid">
+    {% for m in modules %}
+    <div class="col-md-4 col-lg-3 module-card" 
+         data-name="{{ m.name|lower }}" 
+         data-severity="{{ m.severity }}"
+         data-type="{{ m.target_type }}">
+        <div class="card h-100 border-{{ 'danger' if m.severity == 'critical' else 'warning' if m.severity == 'high' else 'info' if m.severity == 'medium' else 'secondary' }}">
+            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                <strong class="small">
+                    {% if m.target_type == 'ble' %}
+                        <i class="bi bi-bluetooth text-info"></i>
+                    {% elif m.target_type == 'classic' %}
+                        <i class="bi bi-phone text-primary"></i>
+                    {% elif m.target_type == 'android' %}
+                        <i class="bi bi-robot text-warning"></i>
+                    {% else %}
+                        <i class="bi bi-arrow-left-right text-success"></i>
+                    {% endif %}
+                    {{ m.name }}
+                </strong>
+                <span class="badge bg-{{ 'danger' if m.severity == 'critical' else 'warning' if m.severity == 'high' else 'info' if m.severity == 'medium' else 'secondary' }}">
+                    {{ m.severity }}
+                </span>
+            </div>
+            <div class="card-body py-2">
+                <p class="card-text small text-muted">{{ m.description[:120] }}{% if m.description|length > 120 %}...{% endif %}</p>
+                <div class="small">
+                    {% if m.cve %}
+                        <span class="badge bg-dark me-1" title="{{ m.cve_url }}">{{ m.cve }}</span>
+                    {% endif %}
+                    <span class="text-muted">v{{ m.version }}</span>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent py-2">
+                <a href="{{ url_for('module_detail', name=m.name) }}" class="btn btn-sm btn-outline-primary w-100">
+                    <i class="bi bi-info-circle"></i> Detalles
+                </a>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox display-3 d-block mb-3"></i>
+            <h5>No se encontraron módulos</h5>
+            <p>Intenta ajustar los filtros de búsqueda.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function applyFilters() {
+    const search = document.getElementById('searchModules').value.toLowerCase();
+    const severity = document.getElementById('severityFilter').value;
+    const type = document.getElementById('typeFilter').value;
+
+    const url = new URL(window.location);
+    if (search) url.searchParams.set('search', search);
+    else url.searchParams.delete('search');
+    if (severity) url.searchParams.set('severity', severity);
+    else url.searchParams.delete('severity');
+    if (type) url.searchParams.set('type', type);
+    else url.searchParams.delete('type');
+
+    window.location = url.toString();
+}
+
+// Enter key triggers filter
+document.getElementById('searchModules').addEventListener('keyup', function(e) {
+    if (e.key === 'Enter') applyFilters();
+});
+</script>
+{% endblock %}

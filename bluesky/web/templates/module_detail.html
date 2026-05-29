@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} - Bluesky{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('modules_page') }}">Módulos</a></li>
+                <li class="breadcrumb-item active">{{ name }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Info Panel -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Información
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr><td class="text-muted">Nombre:</td><td><code>{{ info.name }}</code></td></tr>
+                    <tr><td class="text-muted">Versión:</td><td>{{ info.version }}</td></tr>
+                    <tr><td class="text-muted">Autor:</td><td>{{ info.author }}</td></tr>
+                    <tr><td class="text-muted">Severidad:</td>
+                        <td><span class="badge bg-{{ 'danger' if info.severity == 'critical' else 'warning' if info.severity == 'high' else 'info' if info.severity == 'medium' else 'secondary' }}">{{ info.severity }}</span></td>
+                    </tr>
+                    <tr><td class="text-muted">Target:</td>
+                        <td><span class="badge bg-{{ 'info' if info.target_type == 'ble' else 'primary' if info.target_type == 'classic' else 'warning' if info.target_type == 'android' else 'success' }}">{{ info.target_type }}</span></td>
+                    </tr>
+                    <tr><td class="text-muted">Requiere root:</td>
+                        <td>{% if info.requires_root %}<span class="badge bg-warning">Sí</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
+                    </tr>
+                    <tr><td class="text-muted">Hardware:</td>
+                        <td>
+                            {% if info.requires_hardware %}
+                                {% for hw in info.requires_hardware %}
+                                    <span class="badge bg-dark me-1">{{ hw }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">Ninguno específico</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- CVE Info -->
+        {% if info.cve %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <i class="bi bi-shield-exclamation text-danger"></i> CVE / Vulnerabilidad
+            </div>
+            <div class="card-body">
+                <p><strong>{{ info.cve }}</strong></p>
+                {% if info.cve_url %}
+                <a href="{{ info.cve_url }}" target="_blank" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-box-arrow-up-right"></i> Ver CVE
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Description & Details -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-card-text"></i> Descripción
+            </div>
+            <div class="card-body">
+                <p>{{ info.description }}</p>
+            </div>
+        </div>
+
+        <!-- Module Options -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <i class="bi bi-gear"></i> Opciones del Módulo
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-dark">
+                        <tr><th>Opción</th><th>Descripción</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for opt, desc in info.module_options.items() %}
+                        <tr>
+                            <td><code>{{ opt }}</code></td>
+                            <td><small>{{ desc }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Exploit Links -->
+        {% if info.exploit_links %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <i class="bi bi-link-45deg"></i> Enlaces y Exploits
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    {% for link in info.exploit_links %}
+                    <li class="mb-1">
+                        <a href="{{ link }}" target="_blank" class="text-break">
+                            <i class="bi bi-box-arrow-up-right"></i> {{ link }}
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- References -->
+        {% if info.references %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <i class="bi bi-book"></i> Referencias
+            </div>
+            <div class="card-body">
+                <ul class="mb-0">
+                    {% for ref in info.references %}
+                    <li><small>{{ ref }}</small></li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

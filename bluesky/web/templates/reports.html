@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Reportes - Bluesky{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <h2><i class="bi bi-file-earmark-text text-primary"></i> Reportes</h2>
+        <p class="text-muted">Reportes generados por los módulos de Bluesky.</p>
+    </div>
+</div>
+
+<div class="row g-3">
+    {% for r in reports %}
+    <div class="col-md-4 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-file-earmark-{{ 'richtext' if r.type == 'HTML' else 'code' if r.type == 'JSON' else 'text' }} display-4 text-{{ 'danger' if r.type == 'HTML' else 'info' if r.type == 'JSON' else 'secondary' }}"></i>
+                <h6 class="mt-2 text-truncate" title="{{ r.name }}">{{ r.name }}</h6>
+                <small class="text-muted d-block">{{ r.type }} &bull; {{ r.size }} bytes</small>
+                <small class="text-muted d-block">{{ r.modified }}</small>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="/api/reports/{{ r.name }}" target="_blank" class="btn btn-sm btn-outline-primary w-100">
+                    <i class="bi bi-eye"></i> Ver
+                </a>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-file-earmark-text display-3 d-block mb-3"></i>
+            <h5>No hay reportes</h5>
+            <p>Los reportes se generan al ejecutar módulos de ataque o escaneo.</p>
+            <a href="{{ url_for('scan_page') }}" class="btn btn-primary">
+                <i class="bi bi-play"></i> Iniciar escaneo
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

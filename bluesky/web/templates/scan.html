@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}Escáner - Bluesky{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <h2><i class="bi bi-search text-primary"></i> Escáner Bluetooth</h2>
+        <p class="text-muted">Escanea dispositivos Bluetooth y servicios en el área.</p>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Scan Controls -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-sliders"></i> Controles
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Tipo de escaneo</label>
+                    <select class="form-select" id="scannerType">
+                        <option value="device">🔍 Escaneo de dispositivos</option>
+                        <option value="services">📋 Escaneo de servicios</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Target (opcional)</label>
+                    <input type="text" class="form-control" id="scanTarget"
+                           placeholder="MAC: AA:BB:CC:DD:EE:FF">
+                </div>
+                <button class="btn btn-primary w-100" id="startScan" onclick="startScan()">
+                    <i class="bi bi-play-fill"></i> <span id="scanBtnText">Iniciar escaneo</span>
+                </button>
+                <div id="scanProgress" class="mt-2 d-none">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                    </div>
+                    <small class="text-muted mt-1 d-block text-center">Escaneando...</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <i class="bi bi-lightning"></i> Acciones rápidas
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-danger" onclick="runModule('knob')">
+                        <i class="bi bi-key"></i> KNOB Attack
+                    </button>
+                    <button class="btn btn-outline-warning" onclick="runModule('bluffs')">
+                        <i class="bi bi-shield-exclamation"></i> BLUFFS Attack
+                    </button>
+                    <button class="btn btn-outline-info" onclick="runModule('sweyntooth')">
+                        <i class="bi bi-bug"></i> SweynTooth Scan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-table"></i> Resultados</span>
+                <span id="resultCount" class="badge bg-secondary">0 resultados</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" id="resultsTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>#</th>
+                                <th>Hora</th>
+                                <th>Módulo</th>
+                                <th>Target</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                            {% for r in scan_results %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td><small class="text-muted">{{ r.time }}</small></td>
+                                <td><code>{{ r.module }}</code></td>
+                                <td><small>{{ r.target or '—' }}</small></td>
+                                <td>
+                                    {% if r.success %}
+                                    <span class="badge bg-success">✅ Éxito</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">❌ Fallo</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr id="noResults">
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    <i class="bi bi-search display-6 d-block mb-2"></i>
+                                    <p>No hay resultados. Inicia un escaneo.</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scan Result Detail Modal -->
+<div class="modal fade" id="resultModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-file-earmark-code"></i> Resultado</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="resultJson" class="bg-dark text-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let scanPollInterval = null;
+
+function startScan() {
+    const scanner = document.getElementById('scannerType').value;
+    const target = document.getElementById('scanTarget').value;
+    const btn = document.getElementById('startScan');
+    const progress = document.getElementById('scanProgress');
+
+    btn.disabled = true;
+    document.getElementById('scanBtnText').textContent = 'Escaneando...';
+    progress.classList.remove('d-none');
+
+    fetch('/api/scan', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({scanner: scanner, target: target})
+    })
+    .then(r => r.json())
+    .then(data => {
+        // Poll for results
+        scanPollInterval = setInterval(pollScanStatus, 1000);
+    })
+    .catch(err => {
+        console.error('Error:', err);
+        resetScanButton();
+    });
+}
+
+function pollScanStatus() {
+    fetch('/api/scan/status')
+    .then(r => r.json())
+    .then(data => {
+        if (!data.in_progress) {
+            clearInterval(scanPollInterval);
+            resetScanButton();
+            refreshResults();
+        }
+    });
+}
+
+function resetScanButton() {
+    const btn = document.getElementById('startScan');
+    const progress = document.getElementById('scanProgress');
+    btn.disabled = false;
+    document.getElementById('scanBtnText').textContent = 'Iniciar escaneo';
+    progress.classList.add('d-none');
+}
+
+function refreshResults() {
+    fetch('/api/scan/status')
+    .then(r => r.json())
+    .then(data => {
+        const results = data.recent_results || [];
+        const tbody = document.getElementById('resultsBody');
+        const noResults = document.getElementById('noResults');
+        const count = document.getElementById('resultCount');
+
+        count.textContent = results.length + ' resultados';
+
+        if (results.length === 0) {
+            if (!noResults) {
+                tbody.innerHTML = `<tr id="noResults"><td colspan="5" class="text-center text-muted py-4">
+                    <i class="bi bi-search display-6 d-block mb-2"></i><p>No hay resultados.</p></td></tr>`;
+            }
+            return;
+        }
+
+        tbody.innerHTML = results.map((r, i) => `
+            <tr>
+                <td>${i + 1}</td>
+                <td><small class="text-muted">${r.time || '—'}</small></td>
+                <td><code>${r.module || '—'}</code></td>
+                <td><small>${r.target || '—'}</small></td>
+                <td>
+                    ${r.success
+                        ? '<span class="badge bg-success">✅ Éxito</span>'
+                        : '<span class="badge bg-danger">❌ Fallo</span>'}
+                </td>
+            </tr>
+        `).join('');
+    });
+}
+
+function runModule(name) {
+    fetch(`/api/modules/${name}/run`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({})
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert(`Módulo ${name} iniciado: ${data.message}`);
+        setTimeout(refreshResults, 2000);
+    });
+}
+</script>
+{% endblock %}

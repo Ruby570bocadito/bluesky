@@ -1,0 +1,199 @@
+/* Bluesky Web Dashboard - Custom Styles */
+
+body {
+    background-color: #0d1117;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.footer {
+    margin-top: auto;
+}
+
+/* Cards */
+.card {
+    border-color: #30363d;
+    background-color: #161b22;
+}
+
+.card-header {
+    background-color: #21262d;
+    border-bottom-color: #30363d;
+    font-weight: 500;
+}
+
+/* Tables */
+.table {
+    color: #c9d1d9;
+}
+
+.table-dark {
+    background-color: #161b22;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(88, 166, 255, 0.08);
+}
+
+/* Code blocks */
+code {
+    color: #f0c674;
+    background-color: rgba(240, 198, 116, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+}
+
+/* Forms */
+.form-control, .form-select {
+    background-color: #0d1117;
+    border-color: #30363d;
+    color: #c9d1d9;
+}
+
+.form-control:focus, .form-select:focus {
+    background-color: #0d1117;
+    border-color: #58a6ff;
+    box-shadow: 0 0 0 0.2rem rgba(88, 166, 255, 0.25);
+    color: #c9d1d9;
+}
+
+/* Links */
+a {
+    color: #58a6ff;
+    text-decoration: none;
+}
+
+a:hover {
+    color: #79c0ff;
+    text-decoration: underline;
+}
+
+/* Badges */
+.badge {
+    font-weight: 500;
+}
+
+/* Breadcrumb */
+.breadcrumb {
+    background: transparent;
+}
+
+.breadcrumb-item a {
+    color: #58a6ff;
+}
+
+.breadcrumb-item.active {
+    color: #8b949e;
+}
+
+/* Progress */
+.progress {
+    background-color: #21262d;
+    height: 8px;
+}
+
+.progress-bar {
+    background-color: #58a6ff;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0d1117;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #30363d;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #484f58;
+}
+
+/* Navbar */
+.navbar {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.nav-link {
+    font-size: 0.875rem;
+}
+
+.nav-link i {
+    margin-right: 4px;
+}
+
+/* Module cards animation */
+.module-card {
+    transition: transform 0.2s ease;
+}
+
+.module-card:hover {
+    transform: translateY(-3px);
+}
+
+/* Log container */
+.log-container {
+    font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+}
+
+.log-entry {
+    line-height: 1.5;
+}
+
+.log-entry:hover {
+    background-color: rgba(88, 166, 255, 0.05);
+    border-radius: 3px;
+}
+
+/* Alerts */
+.alert {
+    border: 1px solid #30363d;
+}
+
+/* Modal */
+.modal-content {
+    background-color: #161b22;
+    border-color: #30363d;
+}
+
+.modal-header {
+    border-bottom-color: #30363d;
+}
+
+.modal-footer {
+    border-top-color: #30363d;
+}
+
+/* Close button */
+.btn-close {
+    filter: invert(0.8);
+}
+
+/* Selection */
+::selection {
+    background-color: rgba(88, 166, 255, 0.3);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container-fluid {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .card-body {
+        padding: 0.75rem;
+    }
+}

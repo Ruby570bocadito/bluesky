@@ -1,0 +1,47 @@
+# =============================================================================
+# Bluesky - Dependencias Python
+# =============================================================================
+# Instalación: pip install -r requirements.txt
+#
+# Para instalar todo (incluyendo web dashboard):
+#   pip install -r requirements.txt flask
+#
+# Para desarrollo:
+#   pip install -e ".[dev]"
+
+# ─── Core ──────────────────────────────────────────────────────────────────
+click>=8.0.0
+colorama>=0.4
+
+# ─── CLI interactiva ──────────────────────────────────────────────────────
+rich>=10.0.0
+
+# ─── Comunicación serie ────────────────────────────────────────────────────
+pyserial>=3.5
+
+# ─── Testing ──────────────────────────────────────────────────────────────
+pytest>=7.0
+pytest-cov>=4.0
+
+# ─── Web Dashboard (opcional) ─────────────────────────────────────────────
+# flask>=3.0.0          # Descomentar si usas bluesky web
+
+# ─── Bluetooth (opcional, instalar según plataforma) ──────────────────────
+# bleak>=0.14.0          # BLE cross-platform (Windows, Linux, macOS)
+# pybluez>=0.22          # Bluetooth Classic (Windows, Linux)
+# scapy>=2.4.5           # Packet crafting para ataques activos (KNOB, BLUFFS, BTLEJack)
+# cryptography>=3.4.0    # Criptografía para ataques BLE (Crackle)
+
+# ─── Termux (opcional) ─────────────────────────────────────────────────────
+# Instalar vía pkg: pkg install python python-pip bluez bluez-utils
+# termux-bluetooth vía: pkg install termux-api
+
+# ─── Misceláneos ──────────────────────────────────────────────────────────
+# requests>=2.25.0      # Solo si se necesita para plugins HTTP
+# pycryptodome>=3.0      # Alternativa a cryptography
+
+# ─── Notas de compatibilidad ──────────────────────────────────────────────
+# Windows: Usar bleak para BLE. PyBluez no funciona en Windows moderno.
+# Linux:   Usar BlueZ tools (bluetoothctl, hciconfig). Scapy para paquetes.
+# Termux:  Usar Termux:API (termux-bluetooth-*). Fallback a BlueZ tools.
+# WSL:     No tiene acceso a hardware Bluetooth. Usar modo --dry-run.

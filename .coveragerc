@@ -1,0 +1,17 @@
+[run]
+source = bluesky
+omit =
+    */tests/*
+    */__pycache__/*
+    */.pyc
+    */setup.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == "__main__":
+    def __repr__
+    @abstractmethod
+    class BaseModule
+    def check_prerequisites

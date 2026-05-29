@@ -1,0 +1,72 @@
+# =============================================================================
+# Bluesky - Docker Compose
+#
+# USO:
+#   docker compose run --rm dev bluesky list
+#   docker compose run --rm dev bluesky console
+#   docker compose run --rm test
+#   docker compose run --rm --privileged full bluesky scan
+# =============================================================================
+
+services:
+  # ─── Desarrollo (usuario no-root) ──────────────────────────────────────
+  dev:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - ./bluesky:/bluesky/bluesky:ro
+      - ./tests:/bluesky/tests:ro
+      - ./reports:/bluesky/reports
+    environment:
+      - BLUESKY_ENV=development
+    profiles:
+      - dev
+
+  # ─── Tests ────────────────────────────────────────────────────────────
+  test:
+    build:
+      context: .
+      target: test
+    volumes:
+      - ./bluesky:/bluesky/bluesky:ro
+      - ./tests:/bluesky/tests:ro
+      - ./reports:/bluesky/reports
+    profiles:
+      - test
+
+  # ─── Full (Bluetooth real, necesita --privileged) ──────────────────────
+  full:
+    build:
+      context: .
+      target: full
+    privileged: true
+    network_mode: host
+    volumes:
+      - ./reports:/bluesky/reports
+      - /dev:/dev:ro
+    profiles:
+      - full
+
+  # ─── Producción (imagen mínima) ───────────────────────────────────────
+  production:
+    build:
+      context: .
+      target: production
+    volumes:
+      - ./reports:/bluesky/reports
+    profiles:
+      - production
+
+  # ─── Bash interactivo para debugging ──────────────────────────────────
+  shell:
+    build:
+      context: .
+      target: dev
+    entrypoint: ["/bin/bash"]
+    volumes:
+      - ./bluesky:/bluesky/bluesky:ro
+      - ./tests:/bluesky/tests:ro
+      - ./reports:/bluesky/reports
+    profiles:
+      - dev

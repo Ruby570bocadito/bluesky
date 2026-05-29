@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Logs - Bluesky{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col d-flex justify-content-between align-items-center">
+        <div>
+            <h2><i class="bi bi-terminal text-primary"></i> Logs del Sistema</h2>
+            <p class="text-muted">Registro de actividades del dashboard web.</p>
+        </div>
+        <button class="btn btn-outline-secondary" onclick="refreshLogs()">
+            <i class="bi bi-arrow-clockwise"></i> Actualizar
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="log-container p-3" style="max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 0.875rem;">
+            {% for entry in web_log %}
+            <div class="log-entry mb-1">
+                <span class="text-muted">{{ entry.time }}</span>
+                <span class="badge bg-{{ 'success' if entry.level == 'info' else 'danger' if entry.level == 'error' else 'warning' }} ms-1" style="font-size: 0.7rem;">{{ entry.level }}</span>
+                <span class="ms-1">{{ entry.message }}</span>
+            </div>
+            {% else %}
+            <div class="text-muted text-center py-4">
+                <i class="bi bi-inbox"></i> No hay entradas de log
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function refreshLogs() {
+    fetch('/api/logs')
+    .then(r => r.json())
+    .then(data => {
+        const container = document.querySelector('.log-container');
+        container.innerHTML = data.entries.map(e =>
+            `<div class="log-entry mb-1">
+                <span class="text-muted">${e.time}</span>
+                <span class="badge bg-${e.level === 'info' ? 'success' : e.level === 'error' ? 'danger' : 'warning'} ms-1" style="font-size: 0.7rem;">${e.level}</span>
+                <span class="ms-1">${e.message}</span>
+            </div>`
+        ).join('');
+    });
+}
+
+// Auto-refresh every 5 seconds
+setInterval(refreshLogs, 5000);
+</script>
+{% endblock %}

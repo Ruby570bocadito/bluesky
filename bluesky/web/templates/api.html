@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}API - Bluesky{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col">
+        <h2><i class="bi bi-code-slash text-primary"></i> API REST</h2>
+        <p class="text-muted">Documentación de la API REST de Bluesky Web Dashboard.</p>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Endpoints Disponibles
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr><th>Método</th><th>Endpoint</th><th>Descripción</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/status</code></td>
+                            <td>Estado del sistema, uptime, hardware</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/modules</code></td>
+                            <td>Lista de todos los módulos cargados</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/modules/&lt;name&gt;</code></td>
+                            <td>Detalle de un módulo específico</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-warning">POST</span></td>
+                            <td><code>/api/modules/&lt;name&gt;/run</code></td>
+                            <td>Ejecutar un módulo (body: <code>{"target":"...", "options":{...}}</code>)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-warning">POST</span></td>
+                            <td><code>/api/scan</code></td>
+                            <td>Iniciar escaneo (body: <code>{"scanner":"device|services", "target":"..."}</code>)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/scan/status</code></td>
+                            <td>Estado del escaneo actual</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/hardware</code></td>
+                            <td>Información del hardware Bluetooth</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/sessions</code></td>
+                            <td>Historial de sesiones</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/reports</code></td>
+                            <td>Lista de reportes generados</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/reports/&lt;file&gt;</code></td>
+                            <td>Contenido de un reporte específico</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/logs</code></td>
+                            <td>Logs del sistema (<code>?since=N</code> para logs desde índice N)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">GET</span></td>
+                            <td><code>/api/config</code></td>
+                            <td>Configuración actual de Bluesky</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Examples -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-terminal"></i> Ejemplos cURL
+            </div>
+            <div class="card-body">
+                <pre class="bg-dark text-light p-3 rounded"><code># Estado del sistema
+curl http://localhost:5000/api/status | jq .
+
+# Listar módulos
+curl http://localhost:5000/api/modules | jq .
+
+# Ejecutar módulo KNOB
+curl -X POST http://localhost:5000/api/modules/knob/run \
+  -H "Content-Type: application/json" \
+  -d '{"target":"AA:BB:CC:DD:EE:FF"}'
+
+# Iniciar escaneo
+curl -X POST http://localhost:5000/api/scan \
+  -H "Content-Type: application/json" \
+  -d '{"scanner":"device"}'
+
+# Ver hardware
+curl http://localhost:5000/api/hardware | jq .</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-python"></i> Ejemplos Python
+            </div>
+            <div class="card-body">
+                <pre class="bg-dark text-light p-3 rounded"><code>import requests
+import json
+
+BASE = "http://localhost:5000"
+
+# Estado del sistema
+r = requests.get(f"{BASE}/api/status")
+print(r.json())
+
+# Ejecutar escaneo
+r = requests.post(f"{BASE}/api/scan",
+    json={"scanner": "device"})
+print(r.json())
+
+# Ejecutar módulo
+r = requests.post(
+    f"{BASE}/api/modules/crackle/run",
+    json={"options": {"EXECUTE": "true"}}
+)
+print(r.json())
+
+# Ver resultados
+r = requests.get(f"{BASE}/api/scan/status")
+print(json.dumps(r.json(), indent=2))</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
