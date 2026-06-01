@@ -45,14 +45,25 @@ _ANSI_COLORS = {
     "RESET": "\033[0m",
 }
 
-# Intentar importar Rich para output mejorado
-try:
-    from rich.logging import RichHandler
-    from rich.console import Console
-    RICH_AVAILABLE = True
-    _rich_console = Console(stderr=True)
-except ImportError:
-    RICH_AVAILABLE = False
+# Rich se importa de forma diferida (lazy) para evitar hangs con WSL
+RICH_AVAILABLE: bool = False
+_rich_console = None
+
+
+def _init_rich():
+    """Inicializa Rich de forma diferida."""
+    global RICH_AVAILABLE, _rich_console
+    if RICH_AVAILABLE:
+        return True
+    try:
+        from rich.logging import RichHandler  # noqa: F401  # needed for side effects
+        from rich.console import Console
+        _rich_console = Console(stderr=True)
+        RICH_AVAILABLE = True
+        return True
+    except ImportError:
+        RICH_AVAILABLE = False
+        return False
 
 
 # ─── Formateadores personalizados ─────────────────────────────────────────
@@ -125,8 +136,8 @@ class BlueskyLogger:
         self._logger.handlers.clear()
 
         # ─── Handler de consola ─────────────────────────────────────
-        if rich and RICH_AVAILABLE:
-            # Usar RichHandler para output bonito
+        if rich and _init_rich():
+            from rich.logging import RichHandler
             rich_handler = RichHandler(
                 console=_rich_console,
                 show_time=True,

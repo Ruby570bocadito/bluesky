@@ -59,6 +59,7 @@ def print_help():
     print(f"  {colorize('session', 'cyan'):20} Gestionar sesiones de auditoría")
     print(f"  {colorize('config', 'cyan'):20} Ver/editar configuración")
     print(f"  {colorize('plugin', 'cyan'):20} Gestionar plugins")
+    print(f"  {colorize('spam <target>', 'cyan'):20} BTSpam: inundar dispositivo Bluetooth")
     print(f"  {colorize('web', 'cyan'):20} Iniciar dashboard web (Flask)")
     print()
     print(f"  {colorize('OPCIONES GLOBALES:', 'bold')}")
@@ -82,6 +83,8 @@ def print_help():
     print(f"  bluesky info knob")
     print(f"  bluesky services XX:XX:XX:XX:XX:XX")
     print(f"  bluesky report --html report.html")
+    print(f"  bluesky spam AA:BB:CC:DD:EE:FF")
+    print(f"  bluesky spam --method obex_spam --rate 20 --message 'Hola!' AA:BB:CC:DD:EE:FF")
     print()
 
 
@@ -658,6 +661,109 @@ def cmd_plugin(args: list):
         print(f"    bluesky plugin create <name> [type]  Crear nuevo plugin\n")
 
 
+def cmd_spam(args: list):
+    """Ejecuta BTSpam - Bluetooth Spam contra un dispositivo."""
+    if not args or args[0] in ("-h", "--help"):
+        print(f"\n{separator(title=' BTSpam - Bluetooth Spam ')}")
+        print(f"  Inunda un dispositivo Bluetooth con solicitudes de emparejamiento,")
+        print(f"  mensajes OBEX Push y conexiones RFCOMM.")
+        print()
+        print(f"  {colorize('USO:', 'bold')}")
+        print(f"    bluesky spam <MAC>                     Spam por defecto (todos los métodos)")
+        print(f"    bluesky spam all                        Spam a todos los dispositivos detectados")
+        print(f"    bluesky spam <MAC> --method <m>         Elegir método específico")
+        print(f"    bluesky spam <MAC> --count 100 --rate 20 Configurar intensidad")
+        print()
+        print(f"  {colorize('MÉTODOS:', 'bold')}")
+        print(f"    all              Todos los métodos (por defecto)")
+        print(f"    pairing_flood    Inundar con solicitudes de pairing")
+        print(f"    obex_spam        Enviar mensajes OBEX Push repetidamente")
+        print(f"    connection_flood Abrir/cerrar conexiones RFCOMM masivamente")
+        print()
+        print(f"  {colorize('OPCIONES:', 'bold')}")
+        print(f"    --method <m>     Método de spam (default: all)")
+        print(f"    --rate <n>       Paquetes por segundo (default: 10)")
+        print(f"    --count <n>      Número de iteraciones (default: 50)")
+        print(f"    --duration <s>   Duración en segundos (default: 30)")
+        print(f"    --delay <ms>     Delay entre ráfagas (default: 100)")
+        print(f"    --message <t>    Mensaje para OBEX (default: '👽 Bluesky Spam!')")
+        print()
+        return
+
+    target = ""
+    options = {}
+
+    # Parsear args
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--method" and i + 1 < len(args):
+            options["METHOD"] = args[i + 1]
+            i += 2
+        elif arg == "--rate" and i + 1 < len(args):
+            options["RATE"] = args[i + 1]
+            i += 2
+        elif arg == "--count" and i + 1 < len(args):
+            options["COUNT"] = args[i + 1]
+            i += 2
+        elif arg == "--duration" and i + 1 < len(args):
+            options["DURATION"] = args[i + 1]
+            i += 2
+        elif arg == "--delay" and i + 1 < len(args):
+            options["DELAY"] = args[i + 1]
+            i += 2
+        elif arg == "--message" and i + 1 < len(args):
+            options["MESSAGE"] = args[i + 1]
+            i += 2
+        elif arg.startswith("--"):
+            i += 1
+        else:
+            target = arg
+            i += 1
+
+    engine = ModuleEngine()
+    print(f"\n{separator(title=' BTSpam Attack ')}")
+    if target:
+        print(f"  Target: {colorize(target, 'cyan')}")
+    if options:
+        print(f"  Options: {options}")
+    print()
+
+    result = engine.run_module("btspam", target=target, options=options)
+
+    if result.get("success"):
+        print(f"  {colorize('✅ BTSpam ejecutado correctamente', 'green')}\n")
+    else:
+        print(f"  {colorize('⚠️  BTSpam completado con notas', 'yellow')}\n")
+
+    # Mostrar resultados
+    data = result.get("data", {})
+    for key in ("message", "warning", "summary"):
+        value = data.get(key)
+        if value and isinstance(value, str):
+            for line in value.split("\n"):
+                if line.strip():
+                    print(f"  {line.strip()}")
+
+    # Mostrar estadísticas si existen
+    stats = data.get("stats", {})
+    if stats:
+        print(f"\n  {colorize('📊 Estadísticas:', 'bold')}")
+        for k, v in stats.items():
+            if k == "targets_hit":
+                continue
+            print(f"    {k}: {v}")
+        targets = stats.get("targets_hit", [])
+        if targets:
+            print(f"    targets_hit: {', '.join(list(targets)[:5])}")
+
+    error = result.get("error")
+    if error and not result.get("success"):
+        print(f"\n  {colorize(f'✘ {error}', 'red')}")
+
+    print()
+
+
 def cmd_web(args: list):
     """Inicia el dashboard web."""
     port = 5000
@@ -753,6 +859,7 @@ def main():
         "report": lambda: cmd_report(args),
         "session": lambda: cmd_session(args),
         "console": lambda: start_console(),
+        "spam": lambda: cmd_spam(args),
         "config": lambda: cmd_config(args),
         "plugin": lambda: cmd_plugin(args),
         "web": lambda: cmd_web(args),

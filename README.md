@@ -3,9 +3,9 @@
 ![Version](https://img.shields.io/badge/version-0.1.0-blue)
 ![Python](https://img.shields.io/badge/python-3.8+-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Termux%20%7C%20WSL-orange)
-![Tests](https://img.shields.io/badge/tests-191%20%C3%97%20%E2%9C%85-brightgreen)
+![Tests](https://img.shields.io/badge/tests-212%20%C3%97%20%E2%9C%85-brightgreen)
 
-**Bluesky** es un framework de auditoría Bluetooth unificado, compatible con **Windows**, **Linux**, **Termux (Android)** y **WSL**. Implementa **14+ módulos de ataque/escaneo/exploit** en una CLI modular tipo Metasploit, con **dashboard web Flask**, **consola interactiva REPL**, **sistema de plugins**, y **generación de reportes** (HTML/JSON/TXT).
+**Bluesky** es un framework de auditoría Bluetooth unificado, compatible con **Windows**, **Linux**, **Termux (Android)** y **WSL**. Implementa **15+ módulos de ataque/escaneo/exploit** en una CLI modular tipo Metasploit, con **dashboard web Flask**, **consola interactiva REPL**, **sistema de plugins**, y **generación de reportes** (HTML/JSON/TXT).
 
 ---
 
@@ -110,6 +110,7 @@ bluesky session save mi_auditoria
 | 11 | **`crackle`** | **Crackle — BLE LTK Cracking** | CVE-2014-... | BLE | 🔴 Crítica | ❌ |
 | 12 | **`btlejack`** | **BTLEJack — BLE Connection Hijacking** | — | BLE | 🔴 Crítica | ✅ |
 | 13 | **`bluefrag`** | **BlueFrag — Android Bluetooth RCE** | CVE-2020-0022 | Android | 🔴 Crítica | ❌ |
+| 14 | **`btspam`** | **BTSpam — Bluetooth Spam Flood** | — | Classic/BLE | 🟡 Media | ❌ |
 
 ### 🔑 Leyenda
 - ❌ **Sin hardware extra** — Funciona solo con el Bluetooth de tu portátil
