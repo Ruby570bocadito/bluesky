@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Acerca de - Bluesky Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5">
+            <i class="bi bi-bluetooth text-primary"></i>
+            Acerca de <strong>Bluesky</strong>
+        </h1>
+        <p class="text-muted lead">
+            Framework de auditoría Bluetooth tipo Metasploit — v{{ version }}
+        </p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Descripción -->
+    <div class="col-md-8">
+        <div class="card border-primary h-100">
+            <div class="card-header bg-primary bg-opacity-10">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Descripción</h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    <strong>Bluesky</strong> es un framework de seguridad Bluetooth de código abierto
+                    que implementa una arquitectura modular estilo Metasploit para auditoría,
+                    detección de vulnerabilidades y pruebas de penetración en dispositivos Bluetooth.
+                </p>
+                <p>
+                    Compatible con <strong>Windows</strong>, <strong>Linux</strong>,
+                    <strong>Termux (Android)</strong> y <strong>WSL</strong>, Bluesky unifica
+                    15+ módulos de ataque, 3 escáneres, 3 exploits, un escáner de vulnerabilidades
+                    integrado (13+ checks), consola interactiva REPL, dashboard web, y un autopilot
+                    automatizado de 4 fases (scan→detect→attack→report).
+                </p>
+
+                <h6 class="mt-4"><i class="bi bi-diagram-3"></i> Arquitectura</h6>
+                <ul>
+                    <li><strong>Core Engine:</strong> Descubrimiento dinámico de módulos, carga y ejecución con duck-typing</li>
+                    <li><strong>15 Módulos de ataque:</strong> KNOB, BIAS, BLUFFS, BlueBorne, BlueFrag, BTSpam y más</li>
+                    <li><strong>3 Escáneres:</strong> Dispositivos, servicios SDP, vulnerabilidades (13+ checks)</li>
+                    <li><strong>3 Exploits:</strong> Keystroke injection, L2CAP fuzzing, RFCOMM shell</li>
+                    <li><strong>Autopilot v2:</strong> Pipeline automático de 4 fases con detección dinámica</li>
+                    <li><strong>Consola REPL:</strong> Interfaz tipo Metasploit con search, check, back, tab-completion</li>
+                    <li><strong>Web Dashboard:</strong> Flask + Bootstrap 5 + REST API (16 endpoints)</li>
+                    <li><strong>Multi-plataforma:</strong> Windows, Linux, Termux, WSL con backends específicos</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!--Info del proyecto-->
+    <div class="col-md-4">
+        <div class="card border-info mb-3">
+            <div class="card-header bg-info bg-opacity-10">
+                <h5 class="mb-0"><i class="bi bi-box"></i> Proyecto</h5>
+            </div>
+            <div class="card-body">
+                <dl>
+                    <dt>Versión</dt>
+                    <dd><span class="badge bg-primary fs-6">{{ version }}</span></dd>
+
+                    <dt>Licencia</dt>
+                    <dd><span class="badge bg-success fs-6">MIT</span></dd>
+
+                    <dt>Python</dt>
+                    <dd><span class="badge bg-info fs-6">3.10+</span></dd>
+
+                    <dt>Módulos</dt>
+                    <dd><span class="badge bg-secondary fs-6">{{ modules_count }}</span></dd>
+
+                    <dt>Tests</dt>
+                    <dd><span class="badge bg-success fs-6">222 ✅</span></dd>
+
+                    <dt>Repositorio</dt>
+                    <dd>
+                        <a href="https://github.com/Ruby570bocadito/bluesky" target="_blank" class="btn btn-sm btn-outline-primary mt-1">
+                            <i class="bi bi-github"></i> GitHub
+                        </a>
+                    </dd>
+                </dl>
+            </div>
+        </div>
+
+        <!--Hardware recomendado-->
+        <div class="card border-warning">
+            <div class="card-header bg-warning bg-opacity-10">
+                <h5 class="mb-0"><i class="bi bi-cpu"></i> Hardware</h5>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Hardware recomendado para ataques activos:</p>
+                <ul class="small">
+                    <li><strong>CSR 4.0</strong> — KNOB, BIAS, BLUFFS (~$5-10)</li>
+                    <li><strong>TP-Link UB500</strong> + DarkFirmware — BLUFFS avanzado (~$12)</li>
+                    <li><strong>nRF52840</strong> — BTLEJack, BLE sniffer (~$25)</li>
+                    <li><strong>Ubertooth One</strong> — BLE sniffing avanzado (~$120)</li>
+                </ul>
+                <p class="small text-muted mt-2 mb-0">
+                    <i class="bi bi-info-circle"></i> Sin hardware específico, Bluesky opera en modo escaneo/detección.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!--Estadísticas-->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-secondary">
+            <div class="card-header bg-secondary bg-opacity-10">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Estadísticas del Sistema</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-3 col-6 mb-3">
+                        <div class="border rounded p-3 bg-dark">
+                            <h3 class="text-primary mb-0">{{ modules_count }}</h3>
+                            <small class="text-muted">Módulos</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6 mb-3">
+                        <div class="border rounded p-3 bg-dark">
+                            <h3 class="text-success mb-0">{{ severity_counts.critical + severity_counts.high }}</h3>
+                            <small class="text-muted">Crit/Alta severidad</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6 mb-3">
+                        <div class="border rounded p-3 bg-dark">
+                            <h3 class="text-info mb-0">{{ target_counts.classic + target_counts.both }}</h3>
+                            <small class="text-muted">Classic/Both</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6 mb-3">
+                        <div class="border rounded p-3 bg-dark">
+                            <h3 class="text-warning mb-0">{{ target_counts.ble }}</h3>
+                            <small class="text-muted">Solo BLE</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-2">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-shield-shaded"></i> Por Severidad</h6>
+                        <div class="d-flex gap-2 flex-wrap">
+                            {% if severity_counts.critical %}
+                            <span class="badge bg-danger fs-6">{{ severity_counts.critical }} critical</span>
+                            {% endif %}
+                            {% if severity_counts.high %}
+                            <span class="badge bg-warning text-dark fs-6">{{ severity_counts.high }} high</span>
+                            {% endif %}
+                            {% if severity_counts.medium %}
+                            <span class="badge bg-info fs-6">{{ severity_counts.medium }} medium</span>
+                            {% endif %}
+                            {% if severity_counts.low %}
+                            <span class="badge bg-secondary fs-6">{{ severity_counts.low }} low</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-layers"></i> Por Tipo</h6>
+                        <div class="d-flex gap-2 flex-wrap">
+                            {% if target_counts.classic %}
+                            <span class="badge bg-primary fs-6">{{ target_counts.classic }} classic</span>
+                            {% endif %}
+                            {% if target_counts.both %}
+                            <span class="badge bg-success fs-6">{{ target_counts.both }} both</span>
+                            {% endif %}
+                            {% if target_counts.ble %}
+                            <span class="badge bg-info fs-6">{{ target_counts.ble }} BLE</span>
+                            {% endif %}
+                            {% if target_counts.android %}
+                            <span class="badge bg-warning text-dark fs-6">{{ target_counts.android }} android</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

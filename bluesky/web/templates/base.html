@@ -65,6 +65,12 @@
                             <i class="bi bi-code-slash"></i> API
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'about_page' %}active{% endif %}"
+                           href="{{ url_for('about_page') }}">
+                            <i class="bi bi-info-circle"></i> About
+                        </a>
+                    </li>
                 </ul>
                 <span class="navbar-text">
                     <span id="uptime-display" class="text-muted small">
@@ -84,9 +90,10 @@
     <footer class="footer mt-auto py-3 bg-dark border-top border-secondary">
         <div class="container-fluid text-center">
             <small class="text-muted">
-                <i class="bi bi-bluetooth"></i> Bluesky Web Dashboard &mdash;
-                Auditoría Bluetooth Mult plataforma
+                <i class="bi bi-bluetooth"></i> Bluesky v0.2.0 &mdash;
+                Bluetooth Security Auditing Framework
                 &bull; <a href="{{ url_for('api_docs') }}" class="text-muted">API</a>
+                &bull; <a href="{{ url_for('about_page') }}" class="text-muted">Acerca de</a>
             </small>
         </div>
     </footer>

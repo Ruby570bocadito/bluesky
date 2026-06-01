@@ -286,6 +286,27 @@ def _register_routes(app):
         """Documentación de la API REST."""
         return render_template("api.html")
 
+    @app.route("/about")
+    def about_page():
+        """Página Acerca de."""
+        modules = get_modules()
+        severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        target_counts = {"classic": 0, "ble": 0, "both": 0, "android": 0}
+        for m in modules:
+            sev = m.get("severity", "medium")
+            if sev in severity_counts:
+                severity_counts[sev] += 1
+            ttype = m.get("target_type", "classic")
+            if ttype in target_counts:
+                target_counts[ttype] += 1
+
+        return render_template("about.html",
+            version="0.2.0",
+            modules_count=len(modules),
+            severity_counts=severity_counts,
+            target_counts=target_counts,
+        )
+
     @app.route("/logs")
     def logs_page():
         """Página de logs."""
