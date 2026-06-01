@@ -19,7 +19,7 @@ class BaseModule:
     name: str = ""
     description: str = ""
     author: str = "Bluesky Project"
-    version: str = "0.1.0"
+    version: str = "0.2.0"
     cve: str = ""
     cve_url: str = ""
     exploit_links: List[str] = []
@@ -38,7 +38,35 @@ class BaseModule:
         self.result = {"success": False, "data": {}, "error": None}
 
     def check_prerequisites(self) -> tuple[bool, str]:
-        """Verifica si se cumplen los prerequisitos para ejecutar el módulo."""
+        """Verifica si se cumplen los prerequisitos para ejecutar el módulo.
+
+        Comprobaciones por defecto:
+          - target presente si module_options incluye TARGET
+          - plataforma compatible
+          - hardware requerido (si se puede detectar)
+          - root requerido
+        """
+        # Verificar target
+        if "TARGET" in self.module_options and not self.target:
+            # Si tiene opción TARGET pero no se pasó target directamente,
+            # verificar si está en options
+            if not self.options or not self.options.get("TARGET", ""):
+                return False, "Se requiere un target (MAC address). Usa set TARGET <MAC> o pasa el target al ejecutar."
+
+        # Verificar root
+        if self.requires_root:
+            import os
+            if os.name != "posix" or os.geteuid() != 0:
+                return False, (f"El módulo '{self.name}' requiere privilegios de root. "
+                              "Ejecuta con sudo.")
+
+        # Verificar hardware requerido (solo check básico)
+        if self.requires_hardware:
+            hw_info = ", ".join(self.requires_hardware)
+            # No fallamos, solo advertimos (podría estar en otro sistema)
+            if self.options and self.options.get("STRICT_HW", False):
+                return False, f"Requiere hardware: {hw_info}"
+
         return True, ""
 
     def run(self):

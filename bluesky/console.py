@@ -110,6 +110,17 @@ class BlueskyConsole(cmd.Cmd):
 
     # ─── Comandos principales ──────────────────────────────
 
+    def completedefault(self, *args):
+        """Tab-completion para nombres de módulos."""
+        if len(args) == 2 and args[0]:
+            text = args[0]
+            mods = self.engine.list_modules()
+            return [
+                m.get("name", "") for m in mods
+                if m.get("name", "").startswith(text.lower())
+            ]
+        return []
+
     def do_use(self, arg):
         """use <módulo> - Seleccionar un módulo para usar"""
         if not arg:
@@ -136,6 +147,9 @@ class BlueskyConsole(cmd.Cmd):
         self.module_target = ""
         print(f"  {colorize('✅', 'green')} Módulo '{arg}' seleccionado")
 
+        # Guardar sesión
+        self.session.name = f"session_{arg}"
+
         # Mostrar info básica
         info = self.current_module_info
         if self.console:
@@ -149,6 +163,15 @@ class BlueskyConsole(cmd.Cmd):
                 title=f"[bold cyan]Module: {arg}[/]",
                 border_style="cyan"
             ))
+
+    def do_back(self, arg):
+        """back - Deseleccionar el módulo actual"""
+        self.current_module = None
+        self.current_module_cls = None
+        self.current_module_info = None
+        self.module_options = {}
+        self.module_target = ""
+        print(f"  {colorize('⬅', 'yellow')} Módulo deseleccionado")
 
     def do_set(self, arg):
         """set <opción> <valor> - Configurar opción del módulo actual"""
@@ -335,6 +358,97 @@ class BlueskyConsole(cmd.Cmd):
                 print(f"  {severity_icon(m.get('severity',''))} {colorize(m.get('name',''), 'green'):15} {m.get('description','')[:60]}")
         print()
 
+    def do_search(self, arg):
+        """search <keyword> - Buscar módulos por nombre, CVE, descripción o palabra clave"""
+        if not arg:
+            print("  Uso: search <keyword>")
+            print("  Ej: search knob, search blueborne, search cve-2023, search ble")
+            return
+
+        query = arg.lower().strip()
+        modules = self.engine.list_modules()
+        results = []
+
+        for m in modules:
+            name = m.get("name", "").lower()
+            desc = m.get("description", "").lower()
+            cve = m.get("cve", "").lower()
+            author = m.get("author", "").lower()
+            mod_type = m.get("target_type", "").lower()
+
+            if (query in name or query in desc or query in cve
+                    or query in author or query in mod_type or query in m.get("severity", "")):
+                results.append(m)
+
+        if not results:
+            print(f"  {colorize('✘', 'yellow')} No se encontraron módulos para: '{arg}'")
+            return
+
+        if self.console:
+            table = Table(title=f"Search Results: '{arg}' ({len(results)} matches)", border_style="cyan")
+            table.add_column("", width=2)
+            table.add_column("Name", style="cyan", width=16)
+            table.add_column("Type", width=6)
+            table.add_column("Description", width=50)
+            table.add_column("CVE", style="dim", width=20)
+            for m in results:
+                table.add_row(
+                    severity_icon(m.get("severity", "")),
+                    m.get("name", ""),
+                    target_type_icon(m.get("target_type", "")),
+                    m.get("description", "")[:48],
+                    m.get("cve", "")[:18]
+                )
+            self.console.print(table)
+        else:
+            print(f"\n  {colorize(f'{len(results)} resultado(s) para: {arg}', 'bold')}\n")
+            for m in results:
+                print(f"  {severity_icon(m.get('severity',''))} {colorize(m.get('name',''), 'green'):15} {m.get('description','')[:60]}")
+
+    def do_check(self, arg):
+        """check [target] - Verificar si el módulo actual puede ejecutarse contra el target"""
+        if not self.current_module:
+            print(f"  {colorize('✘', 'red')} No hay módulo seleccionado. Usa 'use <módulo>' primero")
+            return
+
+        target = arg or self.module_target
+        if not target:
+            print(f"  {colorize('⚠️', 'yellow')} Sin target. Usa 'set TARGET <MAC>' o pasa target al comando")
+            print(f"  check <MAC>")
+            return
+
+        cls = self.engine.get_module(self.current_module)
+        if not cls:
+            print(f"  {colorize('✘', 'red')} Módulo '{self.current_module}' no disponible")
+            return
+
+        try:
+            inst = cls(target=target)
+            ok, msg = inst.check_prerequisites()
+            info = inst.get_info()
+
+            if self.console:
+                content = f"[bold]Module:[/] [cyan]{self.current_module}[/]\n"
+                content += f"[bold]Target:[/] [yellow]{target}[/]\n\n"
+                content += f"[bold]Prerequisites:[/] {'[green]✅ OK[/]' if ok else '[red]❌ FAIL[/]'}\n"
+                if msg:
+                    content += f"[bold]Message:[/] {msg}\n"
+                content += f"\n[bold]Target Type:[/] {info.get('target_type','?').upper()}\n"
+                content += f"[bold]Severity:[/] {severity_icon(info.get('severity',''))} {info.get('severity','').title()}\n"
+                content += f"[bold]CVE:[/] {info.get('cve', 'N/A')}\n"
+                content += f"[bold]Requires Root:[/] {'Yes' if info.get('requires_root') else 'No'}\n"
+                if info.get("requires_hardware"):
+                    content += f"[bold]Hardware:[/] {', '.join(info['requires_hardware'])}\n"
+                self.console.print(Panel(content, title="Check Results", border_style="green" if ok else "red"))
+            else:
+                print(f"\n  Check: {self.current_module} → {target}")
+                print(f"  Prerequisitos: {'✅ OK' if ok else '❌ Fallo'}")
+                if msg:
+                    print(f"  Mensaje: {msg}")
+
+        except Exception as e:
+            print(f"  {colorize(f'✘ Error en check: {e}', 'red')}")
+
     def do_info(self, arg):
         """info [módulo] - Mostrar información del módulo actual o de un módulo específico"""
         target_mod = arg or self.current_module
@@ -482,6 +596,68 @@ class BlueskyConsole(cmd.Cmd):
         print()
 
     # ─── Comandos de acción ───────────────────────────────
+
+    def do_vuln(self, arg):
+        """vuln [target] - Escanear vulnerabilidades Bluetooth del dispositivo"""
+        target = arg.strip() if arg else self.module_target
+        if not target:
+            print(f"  {colorize('⚠️', 'yellow')} Sin target. Usa: vuln <MAC> o set TARGET <MAC>")
+            return
+
+        print(f"  {colorize('🔍', 'cyan')} Escaneando vulnerabilidades de {target}...")
+
+        if self.console:
+            with self.console.status("[bold cyan]Scanning vulnerabilities...") as status:
+                result = self.engine.run_module("vuln", target=target)
+        else:
+            result = self.engine.run_module("vuln", target=target)
+
+        self._display_result(result)
+
+        # Guardar en sesión
+        data = result.get("data", {})
+        vulns = data.get("vulnerabilities", [])
+        found = [v for v in vulns if v.get("vulnerable")]
+        if found:
+            self.session.add_result("vuln", target, result.get("success", False), data)
+
+    def do_auto(self, arg):
+        """auto [target] [--mode detect|attack|full] - Ejecutar autopilot completo"""
+        args = arg.split() if arg else []
+        target = ""
+        mode = "full"
+
+        i = 0
+        while i < len(args):
+            if args[i] == "--mode" and i + 1 < len(args):
+                mode = args[i + 1]
+                i += 2
+            elif not args[i].startswith("--"):
+                target = args[i]
+                i += 1
+            else:
+                i += 1
+
+        if not target:
+            target = self.module_target
+
+        print(f"  {colorize('⚡', 'cyan')} Autopilot mode={mode} target={target or 'all'}")
+
+        if self.console:
+            with self.console.status("[bold cyan]Running Autopilot...") as status:
+                result = self.engine.run_module(
+                    "autopilot",
+                    target=target,
+                    options={"MODE": mode, "REPORT": "true"}
+                )
+        else:
+            result = self.engine.run_module(
+                "autopilot",
+                target=target,
+                options={"MODE": mode, "REPORT": "true"}
+            )
+
+        self._display_result(result)
 
     def do_scan(self, arg):
         """scan [--ble|--classic] - Escanear dispositivos Bluetooth"""
@@ -693,11 +869,15 @@ class BlueskyConsole(cmd.Cmd):
             super().do_help(arg)
         else:
             help_text = """
-            [bold cyan]Comandos Bluesky Console[/]
+            [bold cyan]╔══════════════════════════════════════════╗[/]
+            [bold cyan]║     BLUESKY CONSOLE - METASPLOIT MODE  ║[/]
+            [bold cyan]╚══════════════════════════════════════════╝[/]
 
-            [bold]Navegación[/]
+            [bold]Navegación y Búsqueda[/]
               [cyan]use <módulo>[/]       Seleccionar módulo de ataque/escaneo
+              [cyan]back[/]                Deseleccionar módulo actual
               [cyan]list[/]                Listar todos los módulos disponibles
+              [cyan]search <palabra>[/]    Buscar módulos por nombre, CVE, keyword
               [cyan]info [módulo][/]        Info del módulo actual o específico
 
             [bold]Configuración[/]
@@ -708,13 +888,16 @@ class BlueskyConsole(cmd.Cmd):
 
             [bold]Ejecución[/]
               [cyan]run [target][/]          Ejecutar módulo actual
-              [cyan]scan [--ble][/]         Escanear dispositivos Bluetooth
+              [cyan]check [target][/]        Verificar prerequisitos contra target
+              [cyan]scan [--ble|--classic][/] Escanear dispositivos Bluetooth
+              [cyan]vuln <target>[/]         Escanear vulnerabilidades Bluetooth
+              [cyan]auto [target][/]         Autopilot: scan → vuln → attack → report
 
             [bold]Sesión y Reportes[/]
               [cyan]session list[/]          Listar sesiones guardadas
               [cyan]session save <name>[/]   Guardar sesión actual
               [cyan]session load <name>[/]   Cargar sesión
-              [cyan]report [--html][/]       Generar reporte
+              [cyan]report [--html|--json][/] Generar reporte
 
             [bold]Configuración Global[/]
               [cyan]config show[/]           Mostrar configuración actual
@@ -724,7 +907,7 @@ class BlueskyConsole(cmd.Cmd):
 
             [bold]Generales[/]
               [cyan]help[/]                 Mostrar esta ayuda
-              [cyan]exit[/]                 Salir de la consola
+              [cyan]exit / quit[/]          Salir de la consola
             """
 
             if self.console:

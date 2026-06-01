@@ -3,11 +3,14 @@
 # =============================================================================
 # Instalación: pip install -r requirements.txt
 #
-# Para instalar todo (incluyendo web dashboard):
-#   pip install -r requirements.txt flask
+# Instalación completa (BLE + Web):
+#   pip install -r requirements.txt flask bleak pybluez scapy cryptography
 #
-# Para desarrollo:
-#   pip install -e ".[dev]"
+# O usando extras (desde pyproject.toml):
+#   pip install bluesky[all]
+#   pip install bluesky[web]     # Solo web dashboard
+#   pip install bluesky[ble]     # Solo Bluetooth LE
+#   pip install bluesky[dev]     # Desarrollo
 
 # ─── Core ──────────────────────────────────────────────────────────────────
 click>=8.0.0
@@ -23,22 +26,21 @@ pyserial>=3.5
 pytest>=7.0
 pytest-cov>=4.0
 
-# ─── Web Dashboard (opcional) ─────────────────────────────────────────────
-# flask>=3.0.0          # Descomentar si usas bluesky web
+# ─── Web Dashboard ──────────────────────────────────────────────────────────
+# flask>=3.0.0           # Descomentar o instalar manualmente para bluesky web
+# Jinja2>=3.0.0          # Motor de templates (viene con Flask)
 
-# ─── Bluetooth (opcional, instalar según plataforma) ──────────────────────
-# bleak>=0.14.0          # BLE cross-platform (Windows, Linux, macOS)
-# pybluez>=0.22          # Bluetooth Classic (Windows, Linux)
-# scapy>=2.4.5           # Packet crafting para ataques activos (KNOB, BLUFFS, BTLEJack)
-# cryptography>=3.4.0    # Criptografía para ataques BLE (Crackle)
+# ─── Bluetooth (obligatorio para funcionalidad real) ────────────────────────
+# bleak>=0.14.0          # BLE cross-platform (Windows, Linux, macOS, Android)
+# pybluez>=0.22          # Bluetooth Classic (Linux, Windows con drivers)
+# scapy>=2.4.5           # Packet crafting (KNOB, BLUFFS, BTLEJack, SweynTooth)
+# cryptography>=3.4.0    # Criptografía BLE (Crackle, cifrados)
 
-# ─── Termux (opcional) ─────────────────────────────────────────────────────
-# Instalar vía pkg: pkg install python python-pip bluez bluez-utils
-# termux-bluetooth vía: pkg install termux-api
-
-# ─── Misceláneos ──────────────────────────────────────────────────────────
-# requests>=2.25.0      # Solo si se necesita para plugins HTTP
-# pycryptodome>=3.0      # Alternativa a cryptography
+# ─── Herramientas adicionales ───────────────────────────────────────────────
+# requests>=2.25.0       # Para plugins HTTP, OSINT, scraping
+# pycryptodome>=3.0      # Alternativa a cryptography (AES, ECC)
+# bs4>=4.10.0            # BeautifulSoup - parsing HTML (OSINT)
+# lxml>=4.9.0            # XML parsing
 
 # ─── Notas de compatibilidad ──────────────────────────────────────────────
 # Windows: Usar bleak para BLE. PyBluez no funciona en Windows moderno.

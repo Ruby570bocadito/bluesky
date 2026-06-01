@@ -121,15 +121,21 @@ class TestBaseModule(unittest.TestCase):
         base = BaseModule()
         info = base.get_info()
         self.assertEqual(info["name"], "")
-        self.assertEqual(info["version"], "0.1.0")
+        self.assertEqual(info["version"], "0.2.0")
         self.assertEqual(info["severity"], "medium")
 
     def test_03_base_check_prerequisites(self):
-        """Verificar prerequisitos base."""
+        """Verificar prerequisitos base - falla sin target."""
         base = BaseModule()
         ok, msg = base.check_prerequisites()
+        self.assertFalse(ok)
+        self.assertIn("target", msg.lower())
+
+    def test_03b_base_check_prerequisites_with_target(self):
+        """Verificar prerequisitos base con target."""
+        base = BaseModule(target="AA:BB:CC:DD:EE:FF")
+        ok, msg = base.check_prerequisites()
         self.assertTrue(ok)
-        self.assertEqual(msg, "")
 
     def test_04_custom_module(self):
         """Verificar módulo personalizado."""

@@ -59,6 +59,8 @@ def print_help():
     print(f"  {colorize('session', 'cyan'):20} Gestionar sesiones de auditoría")
     print(f"  {colorize('config', 'cyan'):20} Ver/editar configuración")
     print(f"  {colorize('plugin', 'cyan'):20} Gestionar plugins")
+    print(f"  {colorize('vuln <target>', 'cyan'):20} Escanear vulnerabilidades Bluetooth")
+    print(f"  {colorize('auto [target]', 'cyan'):20} Autopilot: scan → vuln → attack → report")
     print(f"  {colorize('spam <target>', 'cyan'):20} BTSpam: inundar dispositivo Bluetooth")
     print(f"  {colorize('web', 'cyan'):20} Iniciar dashboard web (Flask)")
     print()
@@ -83,6 +85,9 @@ def print_help():
     print(f"  bluesky info knob")
     print(f"  bluesky services XX:XX:XX:XX:XX:XX")
     print(f"  bluesky report --html report.html")
+    print(f"  bluesky vuln AA:BB:CC:DD:EE:FF")
+    print(f"  bluesky auto AA:BB:CC:DD:EE:FF")
+    print(f"  bluesky auto --mode detect")
     print(f"  bluesky spam AA:BB:CC:DD:EE:FF")
     print(f"  bluesky spam --method obex_spam --rate 20 --message 'Hola!' AA:BB:CC:DD:EE:FF")
     print()
@@ -661,6 +666,206 @@ def cmd_plugin(args: list):
         print(f"    bluesky plugin create <name> [type]  Crear nuevo plugin\n")
 
 
+def cmd_vuln(args: list):
+    """Ejecuta VulnScanner - análisis de vulnerabilidades Bluetooth."""
+    if not args or args[0] in ("-h", "--help"):
+        print(f"\n{separator(title=' VulnScanner - Análisis de Vulnerabilidades ')}")
+        print(f"  Analiza un dispositivo contra 13+ vulnerabilidades Bluetooth conocidas:")
+        print(f"  KNOB, BIAS, BLUFFS, BlueBorne, BlueFrag, SweynTooth, etc.")
+        print()
+        print(f"  {colorize('USO:', 'bold')}")
+        print(f"    bluesky vuln <MAC>                    Análisis completo")
+        print(f"    bluesky vuln <MAC> --options '{{\"SCAN_TYPE\":\"quick\"}}'  Rápido")
+        print(f"    bluesky vuln <MAC> --options '{{\"REPORT\":\"true\"}}'     Con reporte HTML")
+        print()
+        print(f"  {colorize('PASOS:', 'bold')}")
+        print(f"    1. Descubrir información del dispositivo")
+        print(f"    2. Escanear servicios SDP/RFCOMM")
+        print(f"    3. Detectar vulnerabilidades conocidas")
+        print(f"    4. Generar perfil de vulnerabilidad")
+        print(f"    5. Recomendar cadena de ataque")
+        print()
+        return
+
+    target = args[0] if args else ""
+    options = {}
+
+    # Parsear --options
+    i = 1
+    while i < len(args):
+        if args[i] == "--options" and i + 1 < len(args):
+            try:
+                options = json.loads(args[i + 1])
+            except json.JSONDecodeError:
+                print(f"  {colorize('✘ Error:', 'red')} Opciones JSON inválidas\n")
+                return
+            i += 2
+        else:
+            i += 1
+
+    engine = ModuleEngine()
+    print(f"\n{separator(title=' VulnScanner ')}")
+    print(f"  Target: {colorize(target, 'cyan')}")
+    if options:
+        print(f"  Options: {options}")
+    print()
+
+    result = engine.run_module("vuln", target=target, options=options)
+
+    if result.get("success"):
+        print(f"  {colorize('✅ Análisis completado', 'green')}\n")
+    else:
+        print(f"  {colorize('⚠️  Análisis completado con notas', 'yellow')}\n")
+
+    data = result.get("data", {})
+
+    # Mostrar información del dispositivo
+    dev_info = data.get("device_info", {})
+    if dev_info:
+        print(f"  {colorize('📱 Dispositivo:', 'bold')}")
+        print(f"    Nombre:      {dev_info.get('name', 'Unknown')}")
+        print(f"    MAC:         {dev_info.get('mac', 'N/A')}")
+        print(f"    Clase:       {dev_info.get('class', 'Unknown')}")
+        print(f"    Fabricante:  {dev_info.get('manufacturer', 'Unknown')}")
+        print()
+
+    # Mostrar vulnerabilidades encontradas
+    vulns = data.get("vulnerabilities", [])
+    found = [v for v in vulns if v.get("vulnerable", False)]
+    if found:
+        print(f"  {colorize('🎯 Vulnerabilidades encontradas:', 'bold')}")
+        for v in found:
+            sev_icon = severity_icon(v.get("severity", "low"))
+            sev_color = "red" if v["severity"] == "critical" else "yellow"
+            print(f"    {sev_icon} {colorize(v['id'], sev_color):18} {v['name'][:60]}")
+            if v.get("cve"):
+                print(f"       CVE: {colorize(v['cve'], 'dim')}")
+            if v.get("evidence"):
+                print(f"       → {v['evidence'][:80]}")
+            if v.get("module"):
+                mod_name = v["module"]
+                print(f"       💻 {colorize(f'bluesky attack {mod_name} {target}', 'cyan')}")
+            print()
+
+    # Mostrar resumen
+    summary = data.get("summary")
+    if summary and not found:
+        for line in summary.split("\n"):
+            if line.strip():
+                print(f"  {line.strip()}")
+
+    # Mostrar recomendaciones
+    recs = data.get("recommendations", [])
+    if recs:
+        print(f"  {colorize('📋 Recomendaciones:', 'bold')}")
+        for r in recs:
+            print(f"    {r}")
+        print()
+
+    # Mostrar stats
+    stats = data.get("stats", {})
+    if stats:
+        print(f"  {colorize('📊 Estadísticas:', 'bold')}")
+        print(f"    Checks: {stats.get('total_checks', 0)}  |  "
+              f"Vulnerables: {stats.get('vulnerable', 0)}  |  "
+              f"Críticas: {stats.get('critical', 0)}  |  "
+              f"Altas: {stats.get('high', 0)}")
+        print()
+
+    error = result.get("error")
+    if error and not result.get("success"):
+        print(f"\n  {colorize(f'✘ {error}', 'red')}")
+    print()
+
+
+def cmd_auto(args: list):
+    """Ejecuta Autopilot - scan → vuln → attack → report automatizado."""
+    if not args or args[0] in ("-h", "--help"):
+        print(f"\n{separator(title=' Autopilot v2.0 - Automático ')}")
+        print(f"  Pipeline completo: Escaneo → Vuln Detection → Ataques → Reporte")
+        print()
+        print(f"  {colorize('USO:', 'bold')}")
+        print(f"    bluesky auto                  Auto a todos los dispositivos")
+        print(f"    bluesky auto <MAC>            Auto a target específico")
+        print(f"    bluesky auto --mode detect    Solo detectar vulnerabilidades")
+        print(f"    bluesky auto --mode attack    Solo fase de ataque")
+        print()
+        print(f"  {colorize('OPCIONES:', 'bold')}")
+        print(f"    --mode detect|attack|full     Modo de operación (default: full)")
+        print(f"    --chain \"mod1,mod2,mod3\"       Cadena personalizada de ataques")
+        print(f"    --timeout <n>                 Timeout por módulo (default: 30)")
+        print()
+        print(f"  {colorize('PASOS (full):', 'bold')}")
+        print(f"    1. Escanear dispositivos Bluetooth")
+        print(f"    2. Detectar vulnerabilidades en cada uno")
+        print(f"    3. Construir cadena de ataque según vulns")
+        print(f"    4. Ejecutar ataques automáticamente")
+        print(f"    5. Generar reporte HTML")
+        print()
+        return
+
+    target = ""
+    options = {}
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--mode" and i + 1 < len(args):
+            options["MODE"] = args[i + 1]
+            i += 2
+        elif arg == "--chain" and i + 1 < len(args):
+            options["CHAIN"] = args[i + 1]
+            i += 2
+        elif arg == "--timeout" and i + 1 < len(args):
+            options["TIMEOUT"] = args[i + 1]
+            i += 2
+        elif arg.startswith("--"):
+            i += 1
+        else:
+            target = arg
+            i += 1
+
+    engine = ModuleEngine()
+    mode = options.get("MODE", "full")
+    print(f"\n{separator(title=f' ⚡ Autopilot v2.0 - Mode: {mode.upper()} ')}")
+    if target:
+        print(f"  Target: {colorize(target, 'cyan')}")
+    print()
+
+    result = engine.run_module("autopilot", target=target, options=options)
+
+    data = result.get("data", {})
+
+    # Mostrar resumen completo
+    summary = data.get("summary", "")
+    if summary:
+        for line in summary.split("\n"):
+            if line.strip():
+                print(f"  {line.strip()}")
+
+    # Mostrar stats
+    stats = data.get("stats", {})
+    if stats:
+        print()
+        print(f"  {colorize('📊 Estadísticas finales:', 'bold')}")
+        print(f"    Targets:      {stats.get('targets', 0)}")
+        print(f"    Ataques:      {stats.get('attacks_total', 0)}")
+        print(f"    Exitosos:     {stats.get('attacks_successful', 0)}")
+        print(f"    Vulns encontradas: {stats.get('vulnerabilities_found', 0)}")
+        print()
+
+    # Mostrar ruta del reporte
+    report_path = data.get("report_path")
+    if report_path:
+        print(f"  {colorize(f'📊 Reporte: {report_path}', 'green')}")
+        print()
+
+    error = result.get("error")
+    if error and not result.get("success"):
+        print(f"\n  {colorize(f'✘ {error}', 'red')}")
+    print()
+
+
 def cmd_spam(args: list):
     """Ejecuta BTSpam - Bluetooth Spam contra uno o TODOS los dispositivos."""
     if not args or args[0] in ("-h", "--help"):
@@ -894,6 +1099,8 @@ def main():
         "scan": lambda: cmd_scan(args),
         "list": lambda: cmd_list(),
         "info": lambda: print_module_info(args[0] if args else ""),
+        "vuln": lambda: cmd_vuln(args),
+        "auto": lambda: cmd_auto(args),
         "attack": lambda: cmd_attack(args),
         "services": lambda: cmd_services(args),
         "status": lambda: cmd_status(),

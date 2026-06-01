@@ -1,154 +1,310 @@
-# 🔵 Bluesky - Bluetooth Security Auditing Framework
+# 🦋 Bluesky - Bluetooth Security Toolkit
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
-![Python](https://img.shields.io/badge/python-3.8+-green)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Termux%20%7C%20WSL-orange)
-![Tests](https://img.shields.io/badge/tests-212%20%C3%97%20%E2%9C%85-brightgreen)
+![Version](https://img.shields.io/badge/version-0.2.0-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-brightgreen)
+![Platform](https://img.shields.io/badge/platform-Windows%20|%20Linux%20|%20Termux%20|%20WSL-lightgrey)
+![Tests](https://img.shields.io/badge/tests-222%20passed-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-**Bluesky** es un framework de auditoría Bluetooth unificado, compatible con **Windows**, **Linux**, **Termux (Android)** y **WSL**. Implementa **15+ módulos de ataque/escaneo/exploit** en una CLI modular tipo Metasploit, con **dashboard web Flask**, **consola interactiva REPL**, **sistema de plugins**, y **generación de reportes** (HTML/JSON/TXT).
+**Bluesky** es un framework de auditoría Bluetooth modular tipo Metasploit. Soporta 15+ módulos de ataque, 3 escáneres, 3 exploits, un escáner de vulnerabilidades unificado (13+ checks), consola interactiva REPL, dashboard web, y autopilot automatizado.
+
+> ⚠️ **Solo usar en dispositivos con autorización explícita.**
 
 ---
 
-## 🚀 Instalación Rápida
+## 📦 Instalación Rápida
 
-### Windows (PowerShell)
-
+### Windows
 ```powershell
-# Clonar e instalar
-git clone https://github.com/tuusuario/bluesky.git
+git clone https://github.com/Ruby570bocadito/bluesky.git
 cd bluesky
-pip install -e .
-python -m pip install flask pytest
-
-# Probar
-bluesky help
-bluesky web
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+pip install bleak pybluez scapy cryptography flask  # Bluetooth + Web
+bluesky console
 ```
 
-### Linux (Ubuntu/Debian)
-
+### Linux
 ```bash
-git clone https://github.com/tuusuario/bluesky.git
+git clone https://github.com/Ruby570bocadito/bluesky.git
 cd bluesky
-pip install -e .
-bluesky help
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+sudo apt install bluez bluez-tools bluez-hcidump
+pip install bleak pybluez scapy cryptography flask
+bluesky console
 ```
 
 ### Termux (Android)
-
 ```bash
-pkg install git
-git clone https://github.com/tuusuario/bluesky.git
+pkg install python python-pip bluez bluez-utils termux-api git
+git clone https://github.com/Ruby570bocadito/bluesky.git
 cd bluesky
-chmod +x scripts/install_termux.sh
-./scripts/install_termux.sh
+pip install -r requirements.txt
+bluesky console
+```
+
+### WSL
+> ⚠️ Sin hardware Bluetooth. Usar `--dry-run` para desarrollo/testing.
+```bash
+bluesky scan --dry-run
+bluesky attack knob --target AA:BB:CC:DD:EE:FF --dry-run
 ```
 
 ### Docker
-
 ```bash
 docker build -t bluesky .
-docker run --rm -it --privileged bluesky
+docker run --rm -it --privileged bluesky console
 ```
 
 ---
 
-## 📋 Uso Rápido
+## 🚀 Uso Rápido
 
 ```bash
-# Escanear dispositivos Bluetooth cercanos
-bluesky scan
-
-# Escanear solo BLE
-bluesky scan --ble
-
-# Ver todos los módulos de ataque disponibles
-bluesky list
-
-# Ver info detallada de un ataque
-bluesky info knob
-
-# Ejecutar un ataque sobre un dispositivo
-bluesky attack knob XX:XX:XX:XX:XX:XX
-
-# Enumerar servicios de un dispositivo
-bluesky services XX:XX:XX:XX:XX:XX
-
-# Consola interactiva estilo Metasploit
+# Consola interactiva (Metasploit-style)
 bluesky console
 
-# Dashboard web
-bluesky web [--port 8080] [--host 0.0.0.0] [--open]
+# Escanear dispositivos Bluetooth
+bluesky scan
+bluesky scan --ble            # Solo BLE
+bluesky scan --classic        # Solo Classic
+bluesky scan --timeout 15     # Timeout personalizado
 
-# Ver estado del hardware Bluetooth
+# Escanear vulnerabilidades (13+ checks)
+bluesky vuln AA:BB:CC:DD:EE:FF
+bluesky vuln AA:BB:CC:DD:EE:FF --options '{"REPORT":"true"}'
+
+# Autopilot completo (scan → detect → attack → report)
+bluesky auto
+bluesky auto AA:BB:CC:DD:EE:FF
+bluesky auto --mode detect          # Solo detección
+bluesky auto --mode attack          # Solo ataque
+
+# Ejecutar módulo de ataque
+bluesky attack knob --target AA:BB:CC:DD:EE:FF
+bluesky attack btspam AA:BB:CC:DD:EE:FF --options '{"METHOD":"pairing_flood","RATE":"20"}'
+
+# BTSpam - Inundación Bluetooth
+bluesky spam AA:BB:CC:DD:EE:FF
+bluesky spam --method obex_spam --rate 20 --message "Hello!" AA:BB:CC:DD:EE:FF
+bluesky spam --method pairing_flood --duration 30 --delay 0.1 all
+bluesky spam --method connection_flood --count 500 AA:BB:CC:DD:EE:FF
+
+# Listar módulos
+bluesky list
+
+# Información de módulo
+bluesky info knob
+
+# Servicios SDP
+bluesky services AA:BB:CC:DD:EE:FF
+
+# Estado del sistema
 bluesky status
 
-# Generar reporte de auditoría
+# Generar reporte
 bluesky report --html report.html
+bluesky report --json report.json
 
-# Gestionar sesiones
+# Dashboard web
+bluesky web
+bluesky web --port 8080 --open
+
+# Gestión de sesiones
 bluesky session list
 bluesky session save mi_auditoria
+bluesky session load mi_auditoria
+
+# Configuración
+bluesky config show
+bluesky config set general.timeout=60
+bluesky config save
 ```
 
 ---
 
-## 🎯 Módulos de Ataque (14+)
+## 🛡️ Módulos de Ataque
 
-| # | Módulo | Ataque | CVE | Tipo | Severidad | HW Ext. |
-|---|--------|--------|-----|------|-----------|---------|
-| 1 | `bluejacking` | Bluejacking — Mensajes vCard no solicitados | — | Classic | ⚪ Baja | ❌ |
-| 2 | `bluesnarfing` | Bluesnarfing — Robo de datos vía OBEX | — | Classic | 🟠 Alta | ❌ |
-| 3 | `bluebugging` | Bluebugging — Control AT remoto | — | Classic | 🔴 Crítica | ❌ |
-| 4 | `bias` | BIAS — Suplantación de dispositivos | CVE-2020-10135 | Classic | 🔴 Crítica | ✅ |
-| 5 | `knob` | KNOB — Degradación de clave de cifrado | CVE-2019-9506 | Classic/BLE | 🔴 Crítica | ✅ |
-| 6 | `bluffs` | BLUFFS — Ruptura de seguridad forward | CVE-2023-24023 | Classic/BLE | 🔴 Crítica | ✅ |
-| 7 | `blueborne` | BlueBorne — RCE sin emparejamiento | CVE-2017-0781 | Classic | 🔴 Crítica | ❌ |
-| 8 | `blesa` | BLESA — Spoofing BLE en reconexión | CVE-2020-9770 | BLE | 🟠 Alta | ❌ |
-| 9 | `sweyntooth` | SweynTooth — SoCs BLE vulnerables | CVE-2019-... | BLE | 🔴 Crítica | ❌ |
-| 10 | `whisperpair` | WhisperPair — Secuestro Fast Pair | CVE-2025-36911 | BLE | 🔴 Crítica | ❌ |
-| 11 | **`crackle`** | **Crackle — BLE LTK Cracking** | CVE-2014-... | BLE | 🔴 Crítica | ❌ |
-| 12 | **`btlejack`** | **BTLEJack — BLE Connection Hijacking** | — | BLE | 🔴 Crítica | ✅ |
-| 13 | **`bluefrag`** | **BlueFrag — Android Bluetooth RCE** | CVE-2020-0022 | Android | 🔴 Crítica | ❌ |
-| 14 | **`btspam`** | **BTSpam — Bluetooth Spam Flood** | — | Classic/BLE | 🟡 Media | ❌ |
+| Módulo | Clase | CVE | Tipo | Severidad | Hardware |
+|--------|-------|-----|------|-----------|----------|
+| `knob` | KNOB Attack | CVE-2019-9506 | Classic/BLE | 🔴 Alta | CSR 4.0+ |
+| `bias` | BIAS Attack | CVE-2020-10135 | Classic | 🔴 Alta | CSR 4.0+ |
+| `bluffs` | BLUFFS Attack | CVE-2023-24023 | Classic/BLE | 🔴 Alta | CSR 4.0+ |
+| `blueborne` | BlueBorne | CVE-2017-0781 | Classic | 🔴 Alta | Cualquiera |
+| `bluefrag` | BlueFrag | CVE-2020-0022 | Android BLE | 🟠 Media | Cualquiera |
+| `blesa` | BLESA | CVE-2020-9770 | BLE | 🟠 Media | BLE |
+| `sweyntooth` | SweynTooth | CVE-2019-169xx | BLE | 🔴 Alta | BLE |
+| `whisperpair` | WhisperPair | CVE-2025-36911 | BLE | 🟠 Media | BLE |
+| `crackle` | Crackle | CVE-2014-xxxx | BLE | 🟠 Media | CSR 4.0+ |
+| `btlejack` | BTLEJack | - | BLE | 🔴 Alta | nRF52840 |
+| `bluejacking` | Bluejacking | - | Classic | 🟢 Baja | Cualquiera |
+| `bluesnarfing` | Bluesnarfing | - | Classic | 🟠 Media | Cualquiera |
+| `bluebugging` | Bluebugging | - | Classic | 🔴 Alta | Cualquiera |
+| `btspam` | BTSpam Flood | - | Classic/BLE | 🟡 Media | Cualquiera |
 
-### 🔑 Leyenda
-- ❌ **Sin hardware extra** — Funciona solo con el Bluetooth de tu portátil
-- ✅ **Requiere HW** — Necesita dongle CSR 4.0+, TP-Link UB500, o nRF52840
+### 🔬 Módulos de Explotación
+
+| Módulo | Descripción | Tipo |
+|--------|-------------|------|
+| `keystroke_injection` | Inyección de teclas HID Bluetooth | Classic |
+| `l2cap_fuzz` | Fuzzing de paquetes L2CAP | Classic/BLE |
+| `rfcomm_shell` | Shell remota vía RFCOMM | Classic |
+
+### 🔍 Escáneres
+
+| Módulo | Descripción |
+|--------|-------------|
+| `device_scanner` | Descubrimiento de dispositivos BT/LE |
+| `service_scanner` | Enumeración de servicios SDP |
+| `vuln` | Escáner unificado de 13+ vulnerabilidades |
+
+---
+
+## 🧠 Autopilot v2.0
+
+Pipeline automatizado de 4 fases:
+
+```
+┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+│ Phase 1 │ →  │ Phase 2 │ →  │ Phase 3 │ →  │ Phase 4 │
+│  SCAN   │    │ DETECT  │    │ ATTACK  │    │ REPORT  │
+└─────────┘    └─────────┘    └─────────┘    └─────────┘
+```
+
+**Modos:**
+- `full` — Pipeline completo (default)
+- `detect` — Solo escaneo y detección de vulnerabilidades
+- `attack` — Solo fase de explotación (usando datos previos)
+
+```bash
+bluesky auto AA:BB:CC:DD:EE:FF
+bluesky auto --mode detect
+bluesky auto --chain "knob,bias,bluffs" --timeout 60
+```
+
+---
+
+## 💀 BTSpam - Bluetooth Spam Flood
+
+3 técnicas de inundación:
+
+| Técnica | Descripción | Flag |
+|---------|-------------|------|
+| `pairing_flood` | Inunda con solicitudes de emparejamiento | `--method pairing_flood` |
+| `obex_spam` | Envía mensajes OBEX masivos | `--method obex_spam --message "txt"` |
+| `connection_flood` | Inunda con solicitudes de conexión | `--method connection_flood` |
+
+**Multi-target:** `all`, `*`, `broadcast` para atacar simultáneamente.
+
+```bash
+bluesky spam all                       # Todos los dispositivos
+bluesky spam --method obex_spam --rate 20 AA:BB:CC:DD:EE:FF
+bluesky spam --duration 60 --delay 0.05 broadcast
+```
+
+---
+
+## 🎯 VulnScanner - Escáner de Vulnerabilidades
+
+Analiza 13+ vulnerabilidades Bluetooth con CVSS, CVE, evidencia, y cadena de ataque recomendada:
+
+| Vulnerabilidad | Cobertura |
+|----------------|-----------|
+| KNOB (CVE-2019-9506) | ✅ |
+| BIAS (CVE-2020-10135) | ✅ |
+| BLUFFS (CVE-2023-24023) | ✅ |
+| BlueBorne (CVE-2017-0781) | ✅ |
+| BlueFrag (CVE-2020-0022) | ✅ |
+| SweynTooth (CVE-2019-169xx) | ✅ |
+| WhisperPair (CVE-2025-36911) | ✅ |
+| BLESA (CVE-2020-9770) | ✅ |
+| Crackle (CVE-2014-xxxx) | ✅ |
+| BTLEJack | ✅ |
+| BlueBugging | ✅ |
+| BlueSnarfing | ✅ |
+| Keystroke Injection | ✅ |
+
+```bash
+bluesky vuln AA:BB:CC:DD:EE:FF
+bluesky vuln AA:BB:CC:DD:EE:FF --options '{"REPORT":"true","SCAN_TYPE":"quick"}'
+```
+
+---
+
+## 🖥️ Consola Interactiva (Metasploit-style)
+
+```
+╔══════════════════════════════════════════╗
+║     BLUESKY CONSOLE - METASPLOIT MODE  ║
+╚══════════════════════════════════════════╝
+
+bluesky > use knob
+bluesky (knob) > set TARGET AA:BB:CC:DD:EE:FF
+bluesky (knob) > show options
+bluesky (knob) > check
+bluesky (knob) > run
+bluesky (knob) > back
+bluesky > search blueborne
+bluesky > vuln AA:BB:CC:DD:EE:FF
+bluesky > auto --mode detect
+bluesky > report --html my_report.html
+bluesky > exit
+```
+
+**Comandos:**
+| Comando | Descripción |
+|---------|-------------|
+| `use <módulo>` | Seleccionar módulo |
+| `back` | Deseleccionar módulo |
+| `list` | Listar módulos |
+| `search <keyword>` | Buscar módulos |
+| `info [módulo]` | Información detallada |
+| `set <opt> <val>` | Configurar opción |
+| `show options` | Mostrar opciones |
+| `show targets` | Mostrar targets |
+| `run [target]` | Ejecutar módulo |
+| `check [target]` | Verificar prerequisitos |
+| `scan [--ble]` | Escanear dispositivos |
+| `vuln <target>` | Escanear vulnerabilidades |
+| `auto [target]` | Autopilot completo |
+| `session list/save/load` | Gestión de sesiones |
+| `report [--html]` | Generar reporte |
+| `config show/set/save` | Configuración global |
+| `help` | Mostrar ayuda |
 
 ---
 
 ## 🌐 Web Dashboard
 
-Bluesky incluye un **dashboard web** construido con Flask + Bootstrap 5 (tema oscuro):
+Dashboard Flask embebido con 12 endpoints REST API:
 
 ```
-bluesky web                   # http://127.0.0.1:5000
-bluesky web --port 8080       # Puerto personalizado
-bluesky web --host 0.0.0.0    # Acceso remoto
-bluesky web --open            # Abrir navegador
+bluesky web                     # http://127.0.0.1:5000
+bluesky web --port 8080 --open  # Puerto + abrir navegador
 ```
 
-### Rutas principales
+**Rutas:**
 | Ruta | Descripción |
 |------|-------------|
-| `/` | Dashboard con estado del sistema |
-| `/modules` | Lista de módulos con búsqueda/filtro |
-| `/scan` | Interfaz de escaneo en vivo |
-| `/sessions` | Historial de sesiones |
-| `/reports` | Reportes generados |
-| `/logs` | Logs en vivo (auto-refresh) |
-| `/api` | Documentación interactiva de la API |
-
-### API REST (12 endpoints)
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/status` | Estado, uptime, plataforma |
-| GET | `/api/modules` | Todos los módulos |
-| POST | `/api/modules/<name>/run` | Ejecutar módulo (async) |
-| POST | `/api/scan` | Iniciar escaneo (async) |
-| GET | `/api/hardware` | Información hardware BT |
-| GET | `/api/logs` | Logs con filtro `?since=N` |
+| `/` | Dashboard principal |
+| `/modules` | Lista de módulos |
+| `/modules/<name>` | Detalle de módulo |
+| `/scan` | Escaneo en vivo |
+| `/sessions` | Gestión de sesiones |
+| `/reports` | Reportes guardados |
+| `/logs` | Logs del sistema |
+| `/api/status` | API: estado del sistema |
+| `/api/modules` | API: lista de módulos |
+| `/api/scan` | API: iniciar escaneo |
+| `/api/sessions` | API: sesiones |
+| `/api/reports` | API: reportes |
+| `/api/logs` | API: logs |
+| `/api/config` | API: configuración |
+| `/api/hardware` | API: hardware info |
+| `/api/run-module` | API: ejecutar módulo |
+| `/api-docs` | Documentación API |
 
 ---
 
@@ -157,126 +313,134 @@ bluesky web --open            # Abrir navegador
 ```
 bluesky/
 ├── bluesky/
-│   ├── cli.py                  # CLI principal (Click-style)
-│   ├── console.py              # Consola interactiva REPL
+│   ├── __init__.py           # Paquete principal
+│   ├── cli.py                # CLI entry point
+│   ├── console.py            # Consola interactiva REPL
 │   ├── core/
-│   │   ├── engine.py           # Motor de módulos (carga dinámica)
-│   │   ├── session.py          # Gestión de sesiones de auditoría
-│   │   ├── hardware.py         # Detección de hardware Bluetooth
-│   │   ├── reporter.py         # Generador de reportes (HTML/JSON/TXT)
-│   │   └── plugin_loader.py    # Carga dinámica de plugins
+│   │   ├── __init__.py
+│   │   ├── engine.py         # ModuleEngine + BaseModule
+│   │   ├── session.py        # Gestión de sesiones
+│   │   ├── hardware.py       # Detección de hardware
+│   │   ├── reporter.py       # Generación de reportes
+│   │   └── plugin_loader.py  # Plugins externos
 │   ├── modules/
-│   │   ├── attacks/            # 13+ módulos de ataque
-│   │   ├── scanners/           # Escáneres (dispositivos, servicios)
-│   │   ├── exploits/           # Exploits CVE específicos
-│   │   └── utils/              # Utilidades varias
-│   ├── utils/
-│   │   ├── platform.py         # Detección multiplataforma
-│   │   ├── config.py           # Sistema de configuración (JSON)
-│   │   ├── network.py          # Utilidades de red Bluetooth
-│   │   ├── termux.py           # Soporte específico Termux
-│   │   ├── termux_backend.py   # Backend Termux completo (OUI DB)
-│   │   ├── windows_backend.py  # Backend Windows (PowerShell/WMI)
-│   │   ├── format.py           # Formateo de salida (colores, TUI)
-│   │   └── logger.py           # Sistema de logging profesional
-│   ├── web/
-│   │   ├── app.py              # Flask app + API REST
-│   │   ├── templates/          # 8 templates Jinja2 (Bootstrap 5)
-│   │   └── static/             # CSS + JS personalizados
-├── scripts/
-│   ├── install_linux.sh        # Instalación para Linux
-│   ├── install_termux.sh       # Instalación para Termux (7 pasos)
-│   ├── bluesky-termux.sh       # Launcher Termux
-│   └── completion/             # Auto-completado (bash/zsh/powershell)
-├── tests/                      # 191 tests unitarios
-├── Dockerfile                  # Multi-stage Docker
-├── docker-compose.yml          # 5 servicios
-├── .github/workflows/ci.yml    # GitHub Actions CI
-├── setup.py                    # Instalación pip
+│   │   ├── attacks/          # 15 módulos de ataque
+│   │   │   ├── knob.py, bias.py, bluffs.py, blueborne.py
+│   │   │   ├── blesa.py, sweyntooth.py, whisperpair.py
+│   │   │   ├── crackle.py, btlejack.py, bluefrag.py
+│   │   │   ├── bluejacking.py, bluesnarfing.py, bluebugging.py
+│   │   │   ├── btspam.py     # BTSpam Flood
+│   │   │   └── autopilot.py  # Autopilot v2.0
+│   │   ├── scanners/         # 3 escáneres
+│   │   │   ├── device_scanner.py
+│   │   │   ├── service_scanner.py
+│   │   │   └── vuln_scanner.py  # 13+ vulnerabilidades
+│   │   ├── exploits/         # 3 exploits
+│   │   │   ├── keystroke_injection.py
+│   │   │   ├── l2cap_fuzz.py
+│   │   │   └── rfcomm_shell.py
+│   │   └── utils/            # Utilidades futuras
+│   ├── web/                  # Web Dashboard (Flask)
+│   │   ├── __init__.py
+│   │   ├── app.py
+│   │   └── templates/        # 8 plantillas Jinja2
+│   └── utils/
+│       ├── __init__.py
+│       ├── config.py         # Configuración persistente
+│       ├── logger.py         # Logging + Rich (lazy import)
+│       ├── platform.py       # Detección de plataforma
+│       ├── format_utils.py   # Formateo, colores, iconos
+│       ├── windows_backend.py # Backend Windows (PowerShell)
+│       ├── termux_backend.py  # Backend Termux (API + BlueZ)
+│       └── reporter.py       # Generación de reportes HTML/JSON/TXT
+├── tests/                    # 222 tests (pytest)
+├── requirements.txt
+├── setup.py / pyproject.toml
+├── Dockerfile
 └── README.md
 ```
 
 ---
 
-## 📱 Compatibilidad por Plataforma
+## 🔧 Compatibilidad de Plataformas
 
-| Característica | Windows | Linux | Termux | WSL |
-|---------------|:-------:|:-----:|:------:|:---:|
-| Escaneo Bluetooth | ✅ (bleak) | ✅ (BlueZ) | ✅ (Termux:API) | ⚠️ (limitado) |
-| BLE Scanning | ✅ | ✅ | ✅ | ⚠️ |
-| Módulos de ataque (13) | ✅ | ✅ | ✅ | ⚠️ |
-| Consola REPL | ✅ | ✅ | ✅ | ✅ |
+| Funcionalidad | Windows | Linux | Termux | WSL |
+|--------------|---------|-------|--------|-----|
+| Escaneo BLE (bleak) | ✅ | ✅ | ✅ | ❌ |
+| Escaneo Classic (PyBluez) | ✅ | ✅ | ✅ (BlueZ) | ❌ |
+| Ataques BLE | ✅ | ✅ | ✅ | ❌ (dry-run) |
+| Ataques Classic | ⚠️ | ✅ | ✅ | ❌ (dry-run) |
+| KNOB/BLUFFS activo | ❌ | ✅ (CSR) | ❌ | ❌ |
 | Web Dashboard | ✅ | ✅ | ✅ | ✅ |
-| Plugins | ✅ | ✅ | ✅ | ✅ |
-| Reportes HTML/JSON/TXT | ✅ | ✅ | ✅ | ✅ |
-| Auto-completado | ✅ (ps1) | ✅ (bash/zsh) | ✅ (bash) | ✅ |
-| Ataques avanzados (KNOB/BIAS) | ⚠️ (HW) | ✅ (con dongle) | ⚠️ (root) | ❌ |
+| Consola REPL | ✅ | ✅ | ✅ | ✅ |
+| Docker | ⚠️ | ✅ | ❌ | ✅ |
+| Scapy (paquetes raw) | ❌ | ✅ | ⚠️ | ❌ |
 
 ---
 
 ## 🧪 Tests
 
-**191 tests** — todos pasando en Linux y Windows.
+**222 tests** — todos pasando ✅
 
 ```bash
-# Todos los tests
-python -m pytest tests/ -v
+# Ejecutar todos los tests
+pytest tests/ -v
 
-# Tests rápidos (sin hardware)
-python -m pytest tests/test_utils.py tests/test_config.py tests/test_engine.py tests/test_web.py tests/test_session.py tests/test_reporter.py -v
+# Tests por categoría
+pytest tests/test_engine.py -v       # Motor de módulos
+pytest tests/test_exploits.py -v     # 81 tests: Crackle, BTLEJack, BlueFrag, BTSpam
+pytest tests/test_config.py -v       # Configuración
+pytest tests/test_web.py -v          # Dashboard web
+pytest tests/test_session.py -v      # Sesiones
+pytest tests/test_reporter.py -v     # Reportes
+pytest tests/test_termux_backend.py -v  # Backend Termux
+pytest tests/test_utils.py -v        # Utilidades
+pytest tests/test_hardware.py -v     # Hardware
+pytest tests/test_plugin_loader.py -v # Plugins
 
-# Tests específicos
-python -m pytest tests/test_web.py -v                    # Dashboard web
-python -m pytest tests/test_exploits.py -v                # Exploits
-python -m pytest tests/test_termux_backend.py -v          # Backend Termux
+# Con cobertura
+pytest tests/ --cov=bluesky --cov-report=html
 
-# Tests con cobertura
-python -m pytest tests/ --cov=bluesky --cov-report=html
+# Tests rápidos (omitir web/flask)
+pytest tests/ --ignore=tests/test_web.py -v
 ```
 
-### Tests por archivo
-| Archivo | Tests | ¿Windows? |
-|---------|-------|-----------|
-| `test_utils.py` | 14 | ✅ Sí |
-| `test_config.py` | 18 | ✅ Sí |
-| `test_engine.py` | 16 | ✅ Sí |
-| `test_plugin_loader.py` | 12 | ✅ Sí |
-| `test_reporter.py` | 10 | ✅ Sí |
-| `test_session.py` | 10 | ✅ Sí |
-| `test_hardware.py` | 13 | ⚠️ Parcial |
-| `test_web.py` | 33 | ✅ Sí |
-| `test_exploits.py` | 51 | ✅ Sí |
-| `test_termux_backend.py` | 17 | ✅ Sí (no-op) |
+**Distribución de tests:**
+| Archivo | Tests |
+|---------|-------|
+| `test_exploits.py` | 81 (Crackle 9 + BTLEJack 17 + BlueFrag 19 + BTSpam 30 + Engine 6) |
+| `test_web.py` | 33 |
+| `test_config.py` | 18 |
+| `test_termux_backend.py` | 17 |
+| `test_engine.py` | 17 |
+| `test_termux_backend.py` | 17 |
+| `test_utils.py` | 15 |
+| `test_plugin_loader.py` | 12 |
+| `test_reporter.py` | 10 |
+| `test_session.py` | 10 |
+| `test_hardware.py` | 9 |
+| **Total** | **222** |
 
 ---
 
-## 🛠️ Hardware Recomendado
+## 💻 Hardware Recomendado
 
-- **Para ataques básicos** (Bluejacking, Bluesnarfing, Bluebugging, BlueBorne, Crackle):
-  ✅ Solo tu portátil o Android — No necesitas nada más
-
-- **Para ataques avanzados** (KNOB, BIAS, BLUFFS, BTLEJack):
-  - ✅ **Dongle CSR 4.0** — ~$5 en AliExpress
-  - ✅ **TP-Link UB500 (RTL8761B)** — ~$13, permite DarkFirmware
-  - ✅ **nRF52840** — ~$30, para desarrollo BLE
+| Dispositivo | Uso | Precio |
+|-------------|-----|--------|
+| CSR 4.0 Bluetooth dongle | KNOB, BIAS, BLUFFS activos | ~$5-10 |
+| TP-Link UB500 + DarkFirmware | BLUFFS avanzado, BTLEJack | ~$12 |
+| nRF52840 Dongle | BTLEJack completo, BLE sniffer | ~$25 |
+| Ubertooth One | BLE sniffing avanzado | ~$120 |
+| HackRF One | SDR Bluetooth | ~$300 |
 
 ---
 
-## ⚠️ Aviso Legal
+## ⚖️ Aviso Legal
 
-Bluesky es una herramienta de **seguridad ofensiva** diseñada exclusivamente para:
-- Pruebas de penetración autorizadas
-- Auditorías de seguridad con consentimiento
-- Investigación académica en seguridad Bluetooth
-
-**No uses Bluesky en dispositivos que no te pertenezcan o sin autorización explícita.**
+Este software es solo para **propósitos educativos y pruebas de seguridad autorizadas**. El uso no autorizado de este software contra dispositivos sin consentimiento explícito es ilegal. Los autores no se responsabilizan por el mal uso.
 
 ---
 
 ## 📄 Licencia
 
-MIT License — Ver [LICENSE](LICENSE) para más detalles.
-
----
-
-*Bluesky — Making Bluetooth security auditing accessible to everyone* 🚀
+MIT License — Ver [LICENSE](LICENSE) para detalles.
