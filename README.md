@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Python-3.10%2B-00BFFF?style=for-the-badge&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/Bluetooth-Classic_%2F_BLE-0066CC?style=for-the-badge&logo=bluetooth&logoColor=white" />
   <img src="https://img.shields.io/badge/BLE-5.0-1E90FF?style=for-the-badge&logo=bluetooth&logoColor=white" />
-  <img src="https://img.shields.io/badge/License-MIT-0055AA?style=for-the-badge&logo=opensourceinitiative&logoColor=white" />
+  <img src="https://img.shields.io/github/license/Ruby570bocadito/BlueForge-Suite?style=for-the-badge&labelColor=0d1117&color=0055AA" />
   <img src="https://img.shields.io/badge/Platform-Linux_%7C_Windows_%7C_macOS-0077CC?style=for-the-badge&logo=linux&logoColor=white" />
   <br/>
   <img src="https://img.shields.io/badge/Modules-15%2B-00AAFF?style=for-the-badge&logo=automation&logoColor=white" />
@@ -19,6 +19,7 @@
   <img src="https://img.shields.io/badge/Vuln_Checks-13%2B-0077CC?style=for-the-badge&logo=checkmarx&logoColor=white" />
   <img src="https://img.shields.io/badge/REPL-Console-0066BB?style=for-the-badge&logo=gnubash&logoColor=white" />
   <img src="https://img.shields.io/badge/Dashboard-Web-0055AA?style=for-the-badge&logo=webpack&logoColor=white" />
+  <img src="https://img.shields.io/github/actions/workflow/status/Ruby570bocadito/BlueForge-Suite/ci.yml?style=for-the-badge&logo=githubactions&label=build&branch=main" />
 </p>
 
 <p align="center">

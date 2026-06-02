@@ -50,6 +50,9 @@ reports/
 ehthumbs.db
 Thumbs.db
 
+# Session files
+session.txt
+
 # Environment files
 .env
 .env.local
