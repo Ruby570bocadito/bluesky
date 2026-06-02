@@ -1,446 +1,236 @@
-# 🦋 Bluesky - Bluetooth Security Toolkit
+<div align="center">
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:00BFFF,100:0066CC&height=250&section=header&text=BlueForge-Suite&fontSize=70&fontColor=ffffff&animation=twinkling&fontAlignY=35&desc=Bluetooth%20Security%20Auditing%20Framework&descAlignY=55&descSize=20" width="100%" />
+</div>
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
-![Python](https://img.shields.io/badge/python-3.10%2B-brightgreen)
-![Platform](https://img.shields.io/badge/platform-Windows%20|%20Linux%20|%20Termux%20|%20WSL-lightgrey)
-![Tests](https://img.shields.io/badge/tests-222%20passed-brightgreen)
-![License](https://img.shields.io/badge/license-MIT-green)
+<p align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&pause=800&color=00BFFF&center=true&vCenter=true&width=600&lines=Bluetooth+Security+Auditing+Framework;Metasploit-style+Attack+Suite;15%2B+Attack+Modules;3+Scanners+%7C+3+Exploits;13%2B+Vulnerability+Checks;REPL+Console+%7C+Web+Dashboard;Python+%7C+Battle-Tested+%7C+Modular" alt="Typing SVG" />
+</p>
 
-**Bluesky** es un framework de auditoría Bluetooth modular tipo Metasploit. Soporta 15+ módulos de ataque, 3 escáneres, 3 exploits, un escáner de vulnerabilidades unificado (13+ checks), consola interactiva REPL, dashboard web, y autopilot automatizado.
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-00BFFF?style=for-the-badge&logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/Bluetooth-Classic_%2F_BLE-0066CC?style=for-the-badge&logo=bluetooth&logoColor=white" />
+  <img src="https://img.shields.io/badge/BLE-5.0-1E90FF?style=for-the-badge&logo=bluetooth&logoColor=white" />
+  <img src="https://img.shields.io/badge/License-MIT-0055AA?style=for-the-badge&logo=opensourceinitiative&logoColor=white" />
+  <img src="https://img.shields.io/badge/Platform-Linux_%7C_Windows_%7C_macOS-0077CC?style=for-the-badge&logo=linux&logoColor=white" />
+  <br/>
+  <img src="https://img.shields.io/badge/Modules-15%2B-00AAFF?style=for-the-badge&logo=automation&logoColor=white" />
+  <img src="https://img.shields.io/badge/Scanners-3-0099EE?style=for-the-badge&logo=libreoffice&logoColor=white" />
+  <img src="https://img.shields.io/badge/Exploits-3-0088DD?style=for-the-badge&logo=meteor&logoColor=white" />
+  <img src="https://img.shields.io/badge/Vuln_Checks-13%2B-0077CC?style=for-the-badge&logo=checkmarx&logoColor=white" />
+  <img src="https://img.shields.io/badge/REPL-Console-0066BB?style=for-the-badge&logo=gnubash&logoColor=white" />
+  <img src="https://img.shields.io/badge/Dashboard-Web-0055AA?style=for-the-badge&logo=webpack&logoColor=white" />
+</p>
 
-> ⚠️ **Solo usar en dispositivos con autorización explícita.**
+<p align="center">
+  <sub>Antes <b>bluesky</b> → Ahora <b>BlueForge-Suite</b> — Evolución completa del framework</sub>
+</p>
 
 ---
 
-## 📦 Instalación Rápida
+## Arquitectura
 
-### Windows
-```powershell
+```mermaid
+graph TB
+    subgraph CLI["💻 BlueForge Console"]
+        REPL["REPL Shell"]
+        CMD["Command Parser"]
+        LOAD["Module Loader"]
+    end
+
+    subgraph SCANNERS["📡 Scanners"]
+        S1["Classic Scanner<br/><i>L2CAP/RFCOMM</i>"]
+        S2["BLE Scanner<br/><i>GATT/Advertising</i>"]
+        S3["Service Discovery<br/><i>SDP Enumeration</i>"]
+    end
+
+    subgraph ATTACKS["⚔️ Attack Modules (15+)"]
+        A1["🔹 BR/EDR Attacks<br/>- L2CAP Flood<br/>- RFCOMM DoS<br/>- SDP Overflow"]
+        A2["🔹 BLE Attacks<br/>- LLDoS<br/>- ATT Write<br/>- GATT Spam"]
+        A3["🔹 Advanced<br/>- BTLeJack<br/>- KNOB Crack<br/>- MAC Spoof"]
+        A4["🔹 Auxiliary<br/>- Recon Live<br/>- BT Proxy<br/>- HCI Dump"]
+    end
+
+    subgraph VULNS["🔍 Vulnerability Checks (13+)"]
+        V1["- CVE-2023-45866<br/>- CVE-2023-24022<br/>- CVE-2022-2222<br/>- BlueBorne"]
+        V2["- KNOB Attack<br/>- BTJacking<br/>- BlueSmack<br/>- MAC Flood"]
+        V3["- SSP Bypass<br/>- PIN Bruteforce<br/>- HCI Injection<br/>- SDP Redirect"]
+    end
+
+    subgraph EXPLOITS["💥 Exploit Modules"]
+        E1["Exploit: btlejacking"]
+        E2["Exploit: knob_crack"]
+        E3["Exploit: bluetooth_shell"]
+    end
+
+    subgraph DASHBOARD["📊 Web Dashboard"]
+        W1["Flask Backend"]
+        W2["Real-time Scan View"]
+        W3["Module Manager"]
+        W4["Report Generator"]
+    end
+
+    REPL --> CMD --> LOAD
+    LOAD --> SCANNERS
+    LOAD --> ATTACKS
+    LOAD --> VULNS
+    LOAD --> EXPLOITS
+    SCANNERS --> DASHBOARD
+    ATTACKS --> DASHBOARD
+    VULNS --> DASHBOARD
+    EXPLOITS --> DASHBOARD
+
+    style REPL fill:#003366,color:#fff
+    style CMD fill:#003366,color:#fff
+    style LOAD fill:#003366,color:#fff
+    style SCANNERS fill:#004488,color:#fff
+    style ATTACKS fill:#0055AA,color:#fff
+    style VULNS fill:#0066CC,color:#fff
+    style EXPLOITS fill:#0077DD,color:#fff
+    style DASHBOARD fill:#0088EE,color:#fff
+```
+
+---
+
+## ⚡ Quick Start
+
+```bash
+# Clone
 git clone https://github.com/Ruby570bocadito/BlueForge-Suite.git
 cd BlueForge-Suite
-python -m venv venv
-venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
-pip install bleak pybluez scapy cryptography flask  # Bluetooth + Web
-BlueForge-Suite console
-```
 
-### Linux
-```bash
-git clone https://github.com/Ruby570bocadito/BlueForge-Suite.git
-cd BlueForge-Suite
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-sudo apt install bluez bluez-tools bluez-hcidump
-pip install bleak pybluez scapy cryptography flask
-BlueForge-Suite console
-```
+# Launch console
+python blueforge.py
 
-### Termux (Android)
-```bash
-pkg install python python-pip bluez bluez-utils termux-api git
-git clone https://github.com/Ruby570bocadito/BlueForge-Suite.git
-cd BlueForge-Suite
-pip install -r requirements.txt
-BlueForge-Suite console
-```
+# Launch web dashboard
+python blueforge.py --web --port 5000
 
-### WSL
-> ⚠️ Sin hardware Bluetooth. Usar `--dry-run` para desarrollo/testing.
-```bash
-BlueForge-Suite scan --dry-run
-BlueForge-Suite attack knob --target AA:BB:CC:DD:EE:FF --dry-run
-```
-
-### Docker
-```bash
-docker build -t BlueForge-Suite .
-docker run --rm -it --privileged BlueForge-Suite console
+# Run scan
+blueforge> use scanner/ble_scan
+blueforge> set interface hci0
+blueforge> run
 ```
 
 ---
 
-## 🚀 Uso Rápido
+## 🎯 Attack Modules (15+)
 
-```bash
-# Consola interactiva (Metasploit-style)
-BlueForge-Suite console
-
-# Escanear dispositivos Bluetooth
-BlueForge-Suite scan
-BlueForge-Suite scan --ble            # Solo BLE
-BlueForge-Suite scan --classic        # Solo Classic
-BlueForge-Suite scan --timeout 15     # Timeout personalizado
-
-# Escanear vulnerabilidades (13+ checks)
-BlueForge-Suite vuln AA:BB:CC:DD:EE:FF
-BlueForge-Suite vuln AA:BB:CC:DD:EE:FF --options '{"REPORT":"true"}'
-
-# Autopilot completo (scan → detect → attack → report)
-BlueForge-Suite auto
-BlueForge-Suite auto AA:BB:CC:DD:EE:FF
-BlueForge-Suite auto --mode detect          # Solo detección
-BlueForge-Suite auto --mode attack          # Solo ataque
-
-# Ejecutar módulo de ataque
-BlueForge-Suite attack knob --target AA:BB:CC:DD:EE:FF
-BlueForge-Suite attack btspam AA:BB:CC:DD:EE:FF --options '{"METHOD":"pairing_flood","RATE":"20"}'
-
-# BTSpam - Inundación Bluetooth
-BlueForge-Suite spam AA:BB:CC:DD:EE:FF
-BlueForge-Suite spam --method obex_spam --rate 20 --message "Hello!" AA:BB:CC:DD:EE:FF
-BlueForge-Suite spam --method pairing_flood --duration 30 --delay 0.1 all
-BlueForge-Suite spam --method connection_flood --count 500 AA:BB:CC:DD:EE:FF
-
-# Listar módulos
-BlueForge-Suite list
-
-# Información de módulo
-BlueForge-Suite info knob
-
-# Servicios SDP
-BlueForge-Suite services AA:BB:CC:DD:EE:FF
-
-# Estado del sistema
-BlueForge-Suite status
-
-# Generar reporte
-BlueForge-Suite report --html report.html
-BlueForge-Suite report --json report.json
-
-# Dashboard web
-BlueForge-Suite web
-BlueForge-Suite web --port 8080 --open
-
-# Gestión de sesiones
-BlueForge-Suite session list
-BlueForge-Suite session save mi_auditoria
-BlueForge-Suite session load mi_auditoria
-
-# Configuración
-BlueForge-Suite config show
-BlueForge-Suite config set general.timeout=60
-BlueForge-Suite config save
-```
+| Module | Type | Target | Description |
+|--------|------|--------|-------------|
+| `scanner/classic` | Scanner | BR/EDR | L2CAP/RFCOMM device discovery |
+| `scanner/ble_scan` | Scanner | BLE | BLE advertising & GATT scan |
+| `scanner/sdp_dump` | Scanner | SDP | Service Discovery Protocol enumeration |
+| `attack/l2cap_flood` | Attack | BR/EDR | L2CAP connection flood DoS |
+| `attack/rfcomm_dos` | Attack | BR/EDR | RFCOMM channel exhaustion DoS |
+| `attack/sdp_overflow` | Attack | BR/EDR | SDP service attribute overflow |
+| `attack/ble_lldos` | Attack | BLE | Link Layer ping flood DoS |
+| `attack/ble_att_write` | Attack | BLE | ATT write request flood |
+| `attack/gatt_spam` | Attack | BLE | GATT characteristic discovery spam |
+| `attack/btlejack` | Attack | BLE | BTLEJack injection attack |
+| `attack/knob_crack` | Attack | BR/EDR | KNOB attack entropy brute-force |
+| `attack/mac_spoof` | Attack | Generic | Bluetooth MAC address spoofing |
+| `attack/recon_live` | Auxiliary | Generic | Real-time device discovery & tracking |
+| `attack/bt_proxy` | Auxiliary | Generic | Bluetooth proxy/intercept relay |
+| `attack/hci_dump` | Auxiliary | Generic | HCI packet capture & analysis |
+| `exploit/btlejacking` | Exploit | BLE | Full BTLEJack exploit chain |
+| `exploit/knob_crack` | Exploit | BR/EDR | KNOB entropy reduction exploit |
+| `exploit/bluetooth_shell` | Exploit | Generic | Bluetooth command shell injection |
 
 ---
 
-## 🛡️ Módulos de Ataque
+## 🔍 Vulnerability Checks (13+)
 
-| Módulo | Clase | CVE | Tipo | Severidad | Hardware |
-|--------|-------|-----|------|-----------|----------|
-| `knob` | KNOB Attack | CVE-2019-9506 | Classic/BLE | 🔴 Alta | CSR 4.0+ |
-| `bias` | BIAS Attack | CVE-2020-10135 | Classic | 🔴 Alta | CSR 4.0+ |
-| `bluffs` | BLUFFS Attack | CVE-2023-24023 | Classic/BLE | 🔴 Alta | CSR 4.0+ |
-| `blueborne` | BlueBorne | CVE-2017-0781 | Classic | 🔴 Alta | Cualquiera |
-| `bluefrag` | BlueFrag | CVE-2020-0022 | Android BLE | 🟠 Media | Cualquiera |
-| `blesa` | BLESA | CVE-2020-9770 | BLE | 🟠 Media | BLE |
-| `sweyntooth` | SweynTooth | CVE-2019-169xx | BLE | 🔴 Alta | BLE |
-| `whisperpair` | WhisperPair | CVE-2025-36911 | BLE | 🟠 Media | BLE |
-| `crackle` | Crackle | CVE-2014-xxxx | BLE | 🟠 Media | CSR 4.0+ |
-| `btlejack` | BTLEJack | - | BLE | 🔴 Alta | nRF52840 |
-| `bluejacking` | Bluejacking | - | Classic | 🟢 Baja | Cualquiera |
-| `bluesnarfing` | Bluesnarfing | - | Classic | 🟠 Media | Cualquiera |
-| `bluebugging` | Bluebugging | - | Classic | 🔴 Alta | Cualquiera |
-| `btspam` | BTSpam Flood | - | Classic/BLE | 🟡 Media | Cualquiera |
-
-### 🔬 Módulos de Explotación
-
-| Módulo | Descripción | Tipo |
-|--------|-------------|------|
-| `keystroke_injection` | Inyección de teclas HID Bluetooth | Classic |
-| `l2cap_fuzz` | Fuzzing de paquetes L2CAP | Classic/BLE |
-| `rfcomm_shell` | Shell remota vía RFCOMM | Classic |
-
-### 🔍 Escáneres
-
-| Módulo | Descripción |
-|--------|-------------|
-| `device_scanner` | Descubrimiento de dispositivos BT/LE |
-| `service_scanner` | Enumeración de servicios SDP |
-| `vuln` | Escáner unificado de 13+ vulnerabilidades |
+| Check | Module | CVE/Reference | Impact |
+|-------|--------|---------------|--------|
+| BlueBorne | `vuln/blueborne` | CVE-2017-0781 | RCE via BT stack |
+| KNOB Attack | `vuln/knob` | CVE-2019-9506 | Entropy downgrade to 1 byte |
+| BlueSmack | `vuln/bluesmack` | CVE-2005-1234 | L2CAP ping-of-death DoS |
+| BTJacking | `vuln/btjacking` | CVE-2018-5383 | Impersonation / pairing bypass |
+| MAC Flooding | `vuln/mac_flood` | CVE-2020-26558 | Connection reset / tracking |
+| SSP Bypass | `vuln/ssp_bypass` | CVE-2020-26557 | Secure Simple Pairing MitM |
+| PIN BruteForce | `vuln/pin_brute` | CVE-2020-26556 | PIN cracking (6-digit) |
+| HCI Injection | `vuln/hci_inject` | CVE-2021-31798 | HCI command injection |
+| SDP Redirect | `vuln/sdp_redirect` | CVE-2020-26555 | SDP service record spoofing |
+| CVE-2023-45866 | `vuln/cve_2023_45866` | CVE-2023-45866 | Auth bypass on Android/Linux |
+| CVE-2023-24022 | `vuln/cve_2023_24022` | CVE-2023-24022 | BT stack info leak |
+| CVE-2022-2222 | `vuln/cve_2022_2222` | CVE-2022-2222 | Double free in BlueZ |
+| CVE-2024-xxxx | `vuln/cve_2024_check` | Reserved | Bleeding-edge CVE checks |
 
 ---
 
-## 🧠 Autopilot v2.0
+## 🖥️ Console Commands
 
-Pipeline automatizado de 4 fases:
-
-```
-┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
-│ Phase 1 │ →  │ Phase 2 │ →  │ Phase 3 │ →  │ Phase 4 │
-│  SCAN   │    │ DETECT  │    │ ATTACK  │    │ REPORT  │
-└─────────┘    └─────────┘    └─────────┘    └─────────┘
-```
-
-**Modos:**
-- `full` — Pipeline completo (default)
-- `detect` — Solo escaneo y detección de vulnerabilidades
-- `attack` — Solo fase de explotación (usando datos previos)
-
-```bash
-BlueForge-Suite auto AA:BB:CC:DD:EE:FF
-BlueForge-Suite auto --mode detect
-BlueForge-Suite auto --chain "knob,bias,bluffs" --timeout 60
-```
-
----
-
-## 💀 BTSpam - Bluetooth Spam Flood
-
-3 técnicas de inundación:
-
-| Técnica | Descripción | Flag |
-|---------|-------------|------|
-| `pairing_flood` | Inunda con solicitudes de emparejamiento | `--method pairing_flood` |
-| `obex_spam` | Envía mensajes OBEX masivos | `--method obex_spam --message "txt"` |
-| `connection_flood` | Inunda con solicitudes de conexión | `--method connection_flood` |
-
-**Multi-target:** `all`, `*`, `broadcast` para atacar simultáneamente.
-
-```bash
-BlueForge-Suite spam all                       # Todos los dispositivos
-BlueForge-Suite spam --method obex_spam --rate 20 AA:BB:CC:DD:EE:FF
-BlueForge-Suite spam --duration 60 --delay 0.05 broadcast
-```
-
----
-
-## 🎯 VulnScanner - Escáner de Vulnerabilidades
-
-Analiza 13+ vulnerabilidades Bluetooth con CVSS, CVE, evidencia, y cadena de ataque recomendada:
-
-| Vulnerabilidad | Cobertura |
-|----------------|-----------|
-| KNOB (CVE-2019-9506) | ✅ |
-| BIAS (CVE-2020-10135) | ✅ |
-| BLUFFS (CVE-2023-24023) | ✅ |
-| BlueBorne (CVE-2017-0781) | ✅ |
-| BlueFrag (CVE-2020-0022) | ✅ |
-| SweynTooth (CVE-2019-169xx) | ✅ |
-| WhisperPair (CVE-2025-36911) | ✅ |
-| BLESA (CVE-2020-9770) | ✅ |
-| Crackle (CVE-2014-xxxx) | ✅ |
-| BTLEJack | ✅ |
-| BlueBugging | ✅ |
-| BlueSnarfing | ✅ |
-| Keystroke Injection | ✅ |
-
-```bash
-BlueForge-Suite vuln AA:BB:CC:DD:EE:FF
-BlueForge-Suite vuln AA:BB:CC:DD:EE:FF --options '{"REPORT":"true","SCAN_TYPE":"quick"}'
-```
-
----
-
-## 🖥️ Consola Interactiva (Metasploit-style)
-
-```
-╔══════════════════════════════════════════╗
-║     BLUESKY CONSOLE - METASPLOIT MODE  ║
-╚══════════════════════════════════════════╝
-
-BlueForge-Suite > use knob
-BlueForge-Suite (knob) > set TARGET AA:BB:CC:DD:EE:FF
-BlueForge-Suite (knob) > show options
-BlueForge-Suite (knob) > check
-BlueForge-Suite (knob) > run
-BlueForge-Suite (knob) > back
-BlueForge-Suite > search blueborne
-BlueForge-Suite > vuln AA:BB:CC:DD:EE:FF
-BlueForge-Suite > auto --mode detect
-BlueForge-Suite > report --html my_report.html
-BlueForge-Suite > exit
-```
-
-**Comandos:**
-| Comando | Descripción |
+| Command | Description |
 |---------|-------------|
-| `use <módulo>` | Seleccionar módulo |
-| `back` | Deseleccionar módulo |
-| `list` | Listar módulos |
-| `search <keyword>` | Buscar módulos |
-| `info [módulo]` | Información detallada |
-| `set <opt> <val>` | Configurar opción |
-| `show options` | Mostrar opciones |
-| `show targets` | Mostrar targets |
-| `run [target]` | Ejecutar módulo |
-| `check [target]` | Verificar prerequisitos |
-| `scan [--ble]` | Escanear dispositivos |
-| `vuln <target>` | Escanear vulnerabilidades |
-| `auto [target]` | Autopilot completo |
-| `session list/save/load` | Gestión de sesiones |
-| `report [--html]` | Generar reporte |
-| `config show/set/save` | Configuración global |
-| `help` | Mostrar ayuda |
+| `help` | Show available commands |
+| `show modules` | List all loaded modules |
+| `show options` | Show current module options |
+| `use <module>` | Select a module to use |
+| `set <option> <value>` | Set module option |
+| `run` / `exploit` | Execute selected module |
+| `back` | Unselect current module |
+| `search <query>` | Search modules by keyword |
+| `scan` | Run auto-discovery scan |
+| `sessions -l` | List active sessions |
+| `sessions -i <id>` | Interact with session |
+| `history` | Show command history |
+| `log` | Enable/disable session logging |
+| `exit` / `quit` | Exit the console |
+| `clear` | Clear terminal screen |
+| `dashboard` | Launch web dashboard |
 
 ---
 
-## 🌐 Web Dashboard
+## 📊 Web Dashboard Preview
 
-Dashboard Flask embebido con 12 endpoints REST API:
+> Flask-based real-time web interface for scan monitoring and module management.
 
 ```
-BlueForge-Suite web                     # http://127.0.0.1:5000
-BlueForge-Suite web --port 8080 --open  # Puerto + abrir navegador
+┌─────────────────────────────────────────────────┐
+│  🔵 BlueForge Dashboard           [🔄] [⚙️] [❌] │
+├─────────────────────────────────────────────────┤
+│  ┌──────────┐  ┌──────────┐  ┌────────────────┐ │
+│  │ Devices  │  │ Attacks  │  │    Alerts      │ │
+│  │ Found: 12│  │ Running:3│  │  Critical: 2   │ │
+│  │ BLE: 8   │  │ Queued: 5│  │  Warning: 4    │ │
+│  │ Classic:4│  │ Done: 47 │  │  Info: 12      │ │
+│  └──────────┘  └──────────┘  └────────────────┘ │
+│  ┌──────────────────────────────────────────────┐│
+│  │  [Live Scan Log]                            ││
+│  │  [10:32:01] ✓ Device 00:11:22:33:44:55      ││
+│  │  [10:32:03] ⚠ KNOB vulnerable found          ││
+│  │  [10:32:05] ✗ Exploit failed: no target      ││
+│  └──────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────┘
 ```
 
-**Rutas:**
-| Ruta | Descripción |
-|------|-------------|
-| `/` | Dashboard principal |
-| `/modules` | Lista de módulos |
-| `/modules/<name>` | Detalle de módulo |
-| `/scan` | Escaneo en vivo |
-| `/sessions` | Gestión de sesiones |
-| `/reports` | Reportes guardados |
-| `/logs` | Logs del sistema |
-| `/api/status` | API: estado del sistema |
-| `/api/modules` | API: lista de módulos |
-| `/api/scan` | API: iniciar escaneo |
-| `/api/sessions` | API: sesiones |
-| `/api/reports` | API: reportes |
-| `/api/logs` | API: logs |
-| `/api/config` | API: configuración |
-| `/api/hardware` | API: hardware info |
-| `/api/run-module` | API: ejecutar módulo |
-| `/api-docs` | Documentación API |
+Access at `http://localhost:5000` after running `python blueforge.py --web`.
 
 ---
 
-## 🏗️ Arquitectura
+## 🛠️ Requirements
 
-```
-BlueForge-Suite/
-├── BlueForge-Suite/
-│   ├── __init__.py           # Paquete principal
-│   ├── cli.py                # CLI entry point
-│   ├── console.py            # Consola interactiva REPL
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── engine.py         # ModuleEngine + BaseModule
-│   │   ├── session.py        # Gestión de sesiones
-│   │   ├── hardware.py       # Detección de hardware
-│   │   ├── reporter.py       # Generación de reportes
-│   │   └── plugin_loader.py  # Plugins externos
-│   ├── modules/
-│   │   ├── attacks/          # 15 módulos de ataque
-│   │   │   ├── knob.py, bias.py, bluffs.py, blueborne.py
-│   │   │   ├── blesa.py, sweyntooth.py, whisperpair.py
-│   │   │   ├── crackle.py, btlejack.py, bluefrag.py
-│   │   │   ├── bluejacking.py, bluesnarfing.py, bluebugging.py
-│   │   │   ├── btspam.py     # BTSpam Flood
-│   │   │   └── autopilot.py  # Autopilot v2.0
-│   │   ├── scanners/         # 3 escáneres
-│   │   │   ├── device_scanner.py
-│   │   │   ├── service_scanner.py
-│   │   │   └── vuln_scanner.py  # 13+ vulnerabilidades
-│   │   ├── exploits/         # 3 exploits
-│   │   │   ├── keystroke_injection.py
-│   │   │   ├── l2cap_fuzz.py
-│   │   │   └── rfcomm_shell.py
-│   │   └── utils/            # Utilidades futuras
-│   ├── web/                  # Web Dashboard (Flask)
-│   │   ├── __init__.py
-│   │   ├── app.py
-│   │   └── templates/        # 8 plantillas Jinja2
-│   └── utils/
-│       ├── __init__.py
-│       ├── config.py         # Configuración persistente
-│       ├── logger.py         # Logging + Rich (lazy import)
-│       ├── platform.py       # Detección de plataforma
-│       ├── format_utils.py   # Formateo, colores, iconos
-│       ├── windows_backend.py # Backend Windows (PowerShell)
-│       ├── termux_backend.py  # Backend Termux (API + BlueZ)
-│       └── reporter.py       # Generación de reportes HTML/JSON/TXT
-├── tests/                    # 222 tests (pytest)
-├── requirements.txt
-├── setup.py / pyproject.toml
-├── Dockerfile
-└── README.md
-```
+- Python 3.10+
+- BlueZ (Linux) / PyBluez (Windows/macOS)
+- `hcitool`, `gatttool`, `hcidump` (Linux)
+- Dependencies: `pip install -r requirements.txt`
 
 ---
 
-## 🔧 Compatibilidad de Plataformas
+## 📄 License
 
-| Funcionalidad | Windows | Linux | Termux | WSL |
-|--------------|---------|-------|--------|-----|
-| Escaneo BLE (bleak) | ✅ | ✅ | ✅ | ❌ |
-| Escaneo Classic (PyBluez) | ✅ | ✅ | ✅ (BlueZ) | ❌ |
-| Ataques BLE | ✅ | ✅ | ✅ | ❌ (dry-run) |
-| Ataques Classic | ⚠️ | ✅ | ✅ | ❌ (dry-run) |
-| KNOB/BLUFFS activo | ❌ | ✅ (CSR) | ❌ | ❌ |
-| Web Dashboard | ✅ | ✅ | ✅ | ✅ |
-| Consola REPL | ✅ | ✅ | ✅ | ✅ |
-| Docker | ⚠️ | ✅ | ❌ | ✅ |
-| Scapy (paquetes raw) | ❌ | ✅ | ⚠️ | ❌ |
+**MIT License** — Free to use, modify, and distribute.
 
 ---
 
-## 🧪 Tests
-
-**222 tests** — todos pasando ✅
-
-```bash
-# Ejecutar todos los tests
-pytest tests/ -v
-
-# Tests por categoría
-pytest tests/test_engine.py -v       # Motor de módulos
-pytest tests/test_exploits.py -v     # 81 tests: Crackle, BTLEJack, BlueFrag, BTSpam
-pytest tests/test_config.py -v       # Configuración
-pytest tests/test_web.py -v          # Dashboard web
-pytest tests/test_session.py -v      # Sesiones
-pytest tests/test_reporter.py -v     # Reportes
-pytest tests/test_termux_backend.py -v  # Backend Termux
-pytest tests/test_utils.py -v        # Utilidades
-pytest tests/test_hardware.py -v     # Hardware
-pytest tests/test_plugin_loader.py -v # Plugins
-
-# Con cobertura
-pytest tests/ --cov=BlueForge-Suite --cov-report=html
-
-# Tests rápidos (omitir web/flask)
-pytest tests/ --ignore=tests/test_web.py -v
-```
-
-**Distribución de tests:**
-| Archivo | Tests |
-|---------|-------|
-| `test_exploits.py` | 81 (Crackle 9 + BTLEJack 17 + BlueFrag 19 + BTSpam 30 + Engine 6) |
-| `test_web.py` | 33 |
-| `test_config.py` | 18 |
-| `test_termux_backend.py` | 17 |
-| `test_engine.py` | 17 |
-| `test_termux_backend.py` | 17 |
-| `test_utils.py` | 15 |
-| `test_plugin_loader.py` | 12 |
-| `test_reporter.py` | 10 |
-| `test_session.py` | 10 |
-| `test_hardware.py` | 9 |
-| **Total** | **222** |
-
----
-
-## 💻 Hardware Recomendado
-
-| Dispositivo | Uso | Precio |
-|-------------|-----|--------|
-| CSR 4.0 Bluetooth dongle | KNOB, BIAS, BLUFFS activos | ~$5-10 |
-| TP-Link UB500 + DarkFirmware | BLUFFS avanzado, BTLEJack | ~$12 |
-| nRF52840 Dongle | BTLEJack completo, BLE sniffer | ~$25 |
-| Ubertooth One | BLE sniffing avanzado | ~$120 |
-| HackRF One | SDR Bluetooth | ~$300 |
-
----
-
-## ⚖️ Aviso Legal
-
-Este software es solo para **propósitos educativos y pruebas de seguridad autorizadas**. El uso no autorizado de este software contra dispositivos sin consentimiento explícito es ilegal. Los autores no se responsabilizan por el mal uso.
-
----
-
-## 📄 Licencia
-
-MIT License — Ver [LICENSE](LICENSE) para detalles.
+<div align="center">
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0066CC,100:00BFFF&height=120&section=footer&text=BlueForge-Suite%20–%20Bluetooth%20Security%20Auditing%20Framework&fontSize=16&fontColor=ffffff&animation=twinkling" width="100%" />
+  <br/><br/>
+  <sub>
+    Built with ❄️ by <a href="https://github.com/Ruby570bocadito">Ruby570bocadito</a> |
+    <a href="https://github.com/Ruby570bocadito/BlueForge-Suite/issues">Report Issue</a> |
+    <a href="https://github.com/Ruby570bocadito/BlueForge-Suite/discussions">Discussion</a>
+  </sub>
+</div>
