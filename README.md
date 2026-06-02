@@ -16,46 +16,46 @@
 
 ### Windows
 ```powershell
-git clone https://github.com/Ruby570bocadito/bluesky.git
-cd bluesky
+git clone https://github.com/Ruby570bocadito/BlueForge-Suite.git
+cd BlueForge-Suite
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 pip install bleak pybluez scapy cryptography flask  # Bluetooth + Web
-bluesky console
+BlueForge-Suite console
 ```
 
 ### Linux
 ```bash
-git clone https://github.com/Ruby570bocadito/bluesky.git
-cd bluesky
+git clone https://github.com/Ruby570bocadito/BlueForge-Suite.git
+cd BlueForge-Suite
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 sudo apt install bluez bluez-tools bluez-hcidump
 pip install bleak pybluez scapy cryptography flask
-bluesky console
+BlueForge-Suite console
 ```
 
 ### Termux (Android)
 ```bash
 pkg install python python-pip bluez bluez-utils termux-api git
-git clone https://github.com/Ruby570bocadito/bluesky.git
-cd bluesky
+git clone https://github.com/Ruby570bocadito/BlueForge-Suite.git
+cd BlueForge-Suite
 pip install -r requirements.txt
-bluesky console
+BlueForge-Suite console
 ```
 
 ### WSL
 > ⚠️ Sin hardware Bluetooth. Usar `--dry-run` para desarrollo/testing.
 ```bash
-bluesky scan --dry-run
-bluesky attack knob --target AA:BB:CC:DD:EE:FF --dry-run
+BlueForge-Suite scan --dry-run
+BlueForge-Suite attack knob --target AA:BB:CC:DD:EE:FF --dry-run
 ```
 
 ### Docker
 ```bash
-docker build -t bluesky .
-docker run --rm -it --privileged bluesky console
+docker build -t BlueForge-Suite .
+docker run --rm -it --privileged BlueForge-Suite console
 ```
 
 ---
@@ -64,63 +64,63 @@ docker run --rm -it --privileged bluesky console
 
 ```bash
 # Consola interactiva (Metasploit-style)
-bluesky console
+BlueForge-Suite console
 
 # Escanear dispositivos Bluetooth
-bluesky scan
-bluesky scan --ble            # Solo BLE
-bluesky scan --classic        # Solo Classic
-bluesky scan --timeout 15     # Timeout personalizado
+BlueForge-Suite scan
+BlueForge-Suite scan --ble            # Solo BLE
+BlueForge-Suite scan --classic        # Solo Classic
+BlueForge-Suite scan --timeout 15     # Timeout personalizado
 
 # Escanear vulnerabilidades (13+ checks)
-bluesky vuln AA:BB:CC:DD:EE:FF
-bluesky vuln AA:BB:CC:DD:EE:FF --options '{"REPORT":"true"}'
+BlueForge-Suite vuln AA:BB:CC:DD:EE:FF
+BlueForge-Suite vuln AA:BB:CC:DD:EE:FF --options '{"REPORT":"true"}'
 
 # Autopilot completo (scan → detect → attack → report)
-bluesky auto
-bluesky auto AA:BB:CC:DD:EE:FF
-bluesky auto --mode detect          # Solo detección
-bluesky auto --mode attack          # Solo ataque
+BlueForge-Suite auto
+BlueForge-Suite auto AA:BB:CC:DD:EE:FF
+BlueForge-Suite auto --mode detect          # Solo detección
+BlueForge-Suite auto --mode attack          # Solo ataque
 
 # Ejecutar módulo de ataque
-bluesky attack knob --target AA:BB:CC:DD:EE:FF
-bluesky attack btspam AA:BB:CC:DD:EE:FF --options '{"METHOD":"pairing_flood","RATE":"20"}'
+BlueForge-Suite attack knob --target AA:BB:CC:DD:EE:FF
+BlueForge-Suite attack btspam AA:BB:CC:DD:EE:FF --options '{"METHOD":"pairing_flood","RATE":"20"}'
 
 # BTSpam - Inundación Bluetooth
-bluesky spam AA:BB:CC:DD:EE:FF
-bluesky spam --method obex_spam --rate 20 --message "Hello!" AA:BB:CC:DD:EE:FF
-bluesky spam --method pairing_flood --duration 30 --delay 0.1 all
-bluesky spam --method connection_flood --count 500 AA:BB:CC:DD:EE:FF
+BlueForge-Suite spam AA:BB:CC:DD:EE:FF
+BlueForge-Suite spam --method obex_spam --rate 20 --message "Hello!" AA:BB:CC:DD:EE:FF
+BlueForge-Suite spam --method pairing_flood --duration 30 --delay 0.1 all
+BlueForge-Suite spam --method connection_flood --count 500 AA:BB:CC:DD:EE:FF
 
 # Listar módulos
-bluesky list
+BlueForge-Suite list
 
 # Información de módulo
-bluesky info knob
+BlueForge-Suite info knob
 
 # Servicios SDP
-bluesky services AA:BB:CC:DD:EE:FF
+BlueForge-Suite services AA:BB:CC:DD:EE:FF
 
 # Estado del sistema
-bluesky status
+BlueForge-Suite status
 
 # Generar reporte
-bluesky report --html report.html
-bluesky report --json report.json
+BlueForge-Suite report --html report.html
+BlueForge-Suite report --json report.json
 
 # Dashboard web
-bluesky web
-bluesky web --port 8080 --open
+BlueForge-Suite web
+BlueForge-Suite web --port 8080 --open
 
 # Gestión de sesiones
-bluesky session list
-bluesky session save mi_auditoria
-bluesky session load mi_auditoria
+BlueForge-Suite session list
+BlueForge-Suite session save mi_auditoria
+BlueForge-Suite session load mi_auditoria
 
 # Configuración
-bluesky config show
-bluesky config set general.timeout=60
-bluesky config save
+BlueForge-Suite config show
+BlueForge-Suite config set general.timeout=60
+BlueForge-Suite config save
 ```
 
 ---
@@ -179,9 +179,9 @@ Pipeline automatizado de 4 fases:
 - `attack` — Solo fase de explotación (usando datos previos)
 
 ```bash
-bluesky auto AA:BB:CC:DD:EE:FF
-bluesky auto --mode detect
-bluesky auto --chain "knob,bias,bluffs" --timeout 60
+BlueForge-Suite auto AA:BB:CC:DD:EE:FF
+BlueForge-Suite auto --mode detect
+BlueForge-Suite auto --chain "knob,bias,bluffs" --timeout 60
 ```
 
 ---
@@ -199,9 +199,9 @@ bluesky auto --chain "knob,bias,bluffs" --timeout 60
 **Multi-target:** `all`, `*`, `broadcast` para atacar simultáneamente.
 
 ```bash
-bluesky spam all                       # Todos los dispositivos
-bluesky spam --method obex_spam --rate 20 AA:BB:CC:DD:EE:FF
-bluesky spam --duration 60 --delay 0.05 broadcast
+BlueForge-Suite spam all                       # Todos los dispositivos
+BlueForge-Suite spam --method obex_spam --rate 20 AA:BB:CC:DD:EE:FF
+BlueForge-Suite spam --duration 60 --delay 0.05 broadcast
 ```
 
 ---
@@ -227,8 +227,8 @@ Analiza 13+ vulnerabilidades Bluetooth con CVSS, CVE, evidencia, y cadena de ata
 | Keystroke Injection | ✅ |
 
 ```bash
-bluesky vuln AA:BB:CC:DD:EE:FF
-bluesky vuln AA:BB:CC:DD:EE:FF --options '{"REPORT":"true","SCAN_TYPE":"quick"}'
+BlueForge-Suite vuln AA:BB:CC:DD:EE:FF
+BlueForge-Suite vuln AA:BB:CC:DD:EE:FF --options '{"REPORT":"true","SCAN_TYPE":"quick"}'
 ```
 
 ---
@@ -240,17 +240,17 @@ bluesky vuln AA:BB:CC:DD:EE:FF --options '{"REPORT":"true","SCAN_TYPE":"quick"}'
 ║     BLUESKY CONSOLE - METASPLOIT MODE  ║
 ╚══════════════════════════════════════════╝
 
-bluesky > use knob
-bluesky (knob) > set TARGET AA:BB:CC:DD:EE:FF
-bluesky (knob) > show options
-bluesky (knob) > check
-bluesky (knob) > run
-bluesky (knob) > back
-bluesky > search blueborne
-bluesky > vuln AA:BB:CC:DD:EE:FF
-bluesky > auto --mode detect
-bluesky > report --html my_report.html
-bluesky > exit
+BlueForge-Suite > use knob
+BlueForge-Suite (knob) > set TARGET AA:BB:CC:DD:EE:FF
+BlueForge-Suite (knob) > show options
+BlueForge-Suite (knob) > check
+BlueForge-Suite (knob) > run
+BlueForge-Suite (knob) > back
+BlueForge-Suite > search blueborne
+BlueForge-Suite > vuln AA:BB:CC:DD:EE:FF
+BlueForge-Suite > auto --mode detect
+BlueForge-Suite > report --html my_report.html
+BlueForge-Suite > exit
 ```
 
 **Comandos:**
@@ -281,8 +281,8 @@ bluesky > exit
 Dashboard Flask embebido con 12 endpoints REST API:
 
 ```
-bluesky web                     # http://127.0.0.1:5000
-bluesky web --port 8080 --open  # Puerto + abrir navegador
+BlueForge-Suite web                     # http://127.0.0.1:5000
+BlueForge-Suite web --port 8080 --open  # Puerto + abrir navegador
 ```
 
 **Rutas:**
@@ -311,8 +311,8 @@ bluesky web --port 8080 --open  # Puerto + abrir navegador
 ## 🏗️ Arquitectura
 
 ```
-bluesky/
-├── bluesky/
+BlueForge-Suite/
+├── BlueForge-Suite/
 │   ├── __init__.py           # Paquete principal
 │   ├── cli.py                # CLI entry point
 │   ├── console.py            # Consola interactiva REPL
@@ -399,7 +399,7 @@ pytest tests/test_hardware.py -v     # Hardware
 pytest tests/test_plugin_loader.py -v # Plugins
 
 # Con cobertura
-pytest tests/ --cov=bluesky --cov-report=html
+pytest tests/ --cov=BlueForge-Suite --cov-report=html
 
 # Tests rápidos (omitir web/flask)
 pytest tests/ --ignore=tests/test_web.py -v
