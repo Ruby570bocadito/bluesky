@@ -3,7 +3,6 @@ Tests unitarios para Session (core/session.py)
 """
 
 import sys
-import os
 import json
 import tempfile
 import unittest

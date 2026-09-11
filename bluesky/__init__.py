@@ -33,11 +33,11 @@ Escáneres: device_scanner, service_scanner, vuln (13+ vulnerabilidades).
 Exploits: keystroke_injection, l2cap_fuzz, rfcomm_shell.
 
 Author: Ruby570bocadito
-Version: 0.2.0
+Version: 0.3.0
 License: MIT
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__ = "Ruby570bocadito"
 __description__ = "Bluetooth Security Auditing Framework - Metasploit-style"
 
@@ -46,3 +46,12 @@ from bluesky.core.engine import BaseModule, ModuleEngine
 
 # CLI entry point
 from bluesky.cli import main as cli_main
+
+__all__ = [
+    "BaseModule",
+    "ModuleEngine",
+    "cli_main",
+    "__version__",
+    "__author__",
+    "__description__",
+]

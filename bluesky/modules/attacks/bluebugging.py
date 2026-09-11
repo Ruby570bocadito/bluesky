@@ -3,9 +3,9 @@ Bluebugging - Control del dispositivo vía comandos AT sobre RFCOMM.
 Funciona con Bluetooth interno en dispositivos vulnerables.
 """
 
+import os
 import subprocess
 import time
-from typing import Optional
 
 from bluesky.core.engine import BaseModule
 
@@ -111,7 +111,7 @@ class Bluebugging(BaseModule):
         ]
 
         # Usar rfcomm para conectar
-        rfcomm_dev = f"/dev/rfcomm0"
+        rfcomm_dev = "/dev/rfcomm0"
         try:
             # Bind RFCOMM
             subprocess.run(
@@ -161,6 +161,3 @@ class Bluebugging(BaseModule):
         if not shutil.which("sdptool"):
             return False, "Se necesita 'sdptool' (bluez). Instala: sudo apt install bluez"
         return True, ""
-
-
-import os

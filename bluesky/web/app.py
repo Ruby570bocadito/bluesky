@@ -1,45 +1,49 @@
 """
 bluesky Web Dashboard - Interfaz web para auditoría Bluetooth
 
-Proporciona:
+Diseño minimalista y profesional, 100% offline (sin CDN ni fuentes
+externas) y a prueba de inyección: todo dato dinámico se renderiza en el
+cliente con textContent y en el servidor con el autoescape de Jinja.
+
+Endpoints:
   - Dashboard con estado del sistema y hardware
-  - Listado y ejecución de módulos de ataque/escaneo
+  - Listado, detalle (con modo educativo) y ejecución de módulos
   - Interfaz de escaneo en vivo
-  - Historial de sesiones
-  - Visor de reportes
+  - Historial de sesiones, visor de reportes y logs
   - API REST para integración programática
 
 Uso:
   bluesky web [--port PORT] [--host HOST] [--debug]
-  
-Ejemplo:
-  bluesky web --port 8080 --host 0.0.0.0
+
+Seguridad:
+  - /api/reports/<file> valida que la ruta resuelta quede DENTRO del
+    directorio reports/ (protección contra path traversal).
+  - El estado mutado por hilos (logs, resultados de escaneo) se protege
+    con un Lock.
 """
 
 from __future__ import annotations
 
 import os
-import sys
-import json
 import logging
 import threading
-import time
 import webbrowser
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from typing import Dict, List
+from datetime import datetime
 
 try:
-    from flask import (
-        Flask, render_template, request, jsonify,
-        send_file, redirect, url_for, flash, Response
-    )
+    from flask import Flask, render_template, request, jsonify
 except ImportError:
     Flask = None
 
 # ─── Configuración de logging ───────────────────────────────────────────────
 
 log = logging.getLogger("bluesky.web")
+
+MAX_LOG_ENTRIES = 500
+MAX_SCAN_RESULTS = 200
+
 
 # ─── Crear aplicación Flask ─────────────────────────────────────────────────
 
@@ -62,7 +66,7 @@ def create_app(engine=None, debug: bool = False) -> "Flask":
     app.secret_key = os.urandom(24).hex()
     app.config["DEBUG"] = debug
 
-    # ─── Estado global de la aplicación ─────────────────────────────────────
+    # ─── Estado global de la aplicación (protegido con lock) ───────────────
     app.state = {
         "engine": engine,
         "start_time": datetime.now(),
@@ -70,7 +74,7 @@ def create_app(engine=None, debug: bool = False) -> "Flask":
         "scan_results": [],
         "last_scan_time": None,
         "web_log": [],
-        "max_log_entries": 500,
+        "lock": threading.Lock(),
     }
 
     # ─── Importar módulos de bluesky ────────────────────────────────────────
@@ -121,11 +125,13 @@ def _import_bluesky(app):
     except Exception:
         app.state["config"] = None
 
+    # Session (no SessionManager: esa clase nunca existió — bug histórico
+    # que dejaba /sessions y /api/sessions siempre vacíos).
     try:
-        from bluesky.core.session import SessionManager
-        app.state["session_manager"] = SessionManager()
+        from bluesky.core.session import Session
+        app.state["session_cls"] = Session
     except Exception:
-        app.state["session_manager"] = None
+        app.state["session_cls"] = None
 
 
 def _register_routes(app):
@@ -134,15 +140,16 @@ def _register_routes(app):
     # ─── HELPERS ────────────────────────────────────────────────────────────
 
     def add_log(level: str, message: str):
-        """Añade entrada al log web."""
+        """Añade entrada al log web (thread-safe)."""
         entry = {
             "time": datetime.now().strftime("%H:%M:%S"),
             "level": level,
             "message": message,
         }
-        app.state["web_log"].append(entry)
-        if len(app.state["web_log"]) > app.state["max_log_entries"]:
-            app.state["web_log"] = app.state["web_log"][-app.state["max_log_entries"]:]
+        with app.state["lock"]:
+            app.state["web_log"].append(entry)
+            if len(app.state["web_log"]) > MAX_LOG_ENTRIES:
+                app.state["web_log"][:] = app.state["web_log"][-MAX_LOG_ENTRIES:]
         return entry
 
     def get_uptime() -> str:
@@ -172,6 +179,57 @@ def _register_routes(app):
                 pass
         return []
 
+    def list_saved_sessions() -> List[str]:
+        """Lista las sesiones guardadas (tolera manager ausente)."""
+        session_cls = app.state.get("session_cls")
+        if not session_cls:
+            return []
+        try:
+            return session_cls.list_sessions() or []
+        except Exception:
+            return []
+
+    def list_reports() -> List[Dict]:
+        """Lista los reportes del directorio reports/ de forma segura."""
+        reports_dir = Path("reports")
+        reports = []
+        if reports_dir.exists():
+            for f in reports_dir.iterdir():
+                try:
+                    if not f.is_file():
+                        continue
+                    if f.suffix not in (".html", ".json", ".txt"):
+                        continue
+                    stat = f.stat()
+                    reports.append({
+                        "name": f.name,
+                        "path": str(f),
+                        "size": stat.st_size,
+                        "modified": datetime.fromtimestamp(
+                            stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                        "type": f.suffix[1:].upper(),
+                    })
+                except OSError:
+                    continue
+        reports.sort(key=lambda r: r["modified"], reverse=True)
+        return reports
+
+    def severity_counts_of(modules: List[Dict]) -> Dict[str, int]:
+        counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        for m in modules:
+            sev = str(m.get("severity", "medium")).lower()
+            if sev in counts:
+                counts[sev] += 1
+        return counts
+
+    def target_counts_of(modules: List[Dict]) -> Dict[str, int]:
+        counts = {"classic": 0, "ble": 0, "both": 0, "android": 0}
+        for m in modules:
+            ttype = str(m.get("target_type", "classic")).lower()
+            if ttype in counts:
+                counts[ttype] += 1
+        return counts
+
     # ─── RUTAS PRINCIPALES ──────────────────────────────────────────────────
 
     @app.route("/")
@@ -181,27 +239,21 @@ def _register_routes(app):
         modules = get_modules()
         info = app.state.get("platform_info", {})
 
-        # Estadísticas
-        severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-        target_counts = {"classic": 0, "ble": 0, "both": 0, "android": 0}
-        for m in modules:
-            sev = m.get("severity", "medium")
-            if sev in severity_counts:
-                severity_counts[sev] += 1
-            ttype = m.get("target_type", "classic")
-            if ttype in target_counts:
-                target_counts[ttype] += 1
+        with app.state["lock"]:
+            recent_results = app.state["scan_results"][-8:]
+            recent_log = app.state["web_log"][-12:]
 
         return render_template("index.html",
             uptime=get_uptime(),
             caps=caps,
-            modules=modules,
+            modules=modules[:8],
+            modules_total=len(modules),
             info=info,
-            severity_counts=severity_counts,
-            target_counts=target_counts,
-            modules_count=len(modules),
-            scan_results=app.state["scan_results"][-10:],
-            web_log=app.state["web_log"][-20:],
+            severity_counts=severity_counts_of(modules),
+            target_counts=target_counts_of(modules),
+            scan_in_progress=app.state["scan_in_progress"],
+            scan_results=recent_results,
+            web_log=recent_log,
         )
 
     @app.route("/modules")
@@ -214,72 +266,70 @@ def _register_routes(app):
 
         if search:
             modules = [m for m in modules
-                      if search in m.get("name", "").lower()
-                      or search in m.get("description", "").lower()]
+                      if search in str(m.get("name", "")).lower()
+                      or search in str(m.get("description", "")).lower()]
         if severity_filter:
-            modules = [m for m in modules if m.get("severity") == severity_filter]
+            modules = [m for m in modules
+                       if str(m.get("severity", "")).lower() == severity_filter]
         if type_filter:
-            modules = [m for m in modules if m.get("target_type") == type_filter]
+            modules = [m for m in modules
+                       if str(m.get("target_type", "")).lower() == type_filter]
 
         return render_template("modules.html",
             modules=modules,
             search=search,
             severity_filter=severity_filter,
             type_filter=type_filter,
+            modules_total=len(get_modules()),
         )
 
     @app.route("/modules/<name>")
     def module_detail(name: str):
-        """Detalle de un módulo específico."""
+        """Detalle de un módulo específico + sección educativa."""
         cls = app.state["engine"].get_module(name) if app.state["engine"] else None
         if not cls:
-            return render_template("error.html", message=f"Módulo '{name}' no encontrado"), 404
+            return render_template("error.html",
+                message=f"Módulo '{name}' no encontrado"), 404
 
         try:
             inst = cls()
             info = inst.get_info()
-            return render_template("module_detail.html",
-                info=info,
-                name=name,
-            )
         except Exception as e:
             return render_template("error.html", message=str(e)), 500
+
+        # Modo educativo: explicación paso a paso del módulo (si existe)
+        education = None
+        try:
+            from bluesky.core.education import get_education
+            education = get_education(name)
+        except Exception:
+            education = None
+
+        return render_template("module_detail.html",
+            info=info,
+            name=name,
+            education=education,
+        )
 
     @app.route("/scan")
     def scan_page():
         """Página de escaneo."""
+        with app.state["lock"]:
+            results = app.state["scan_results"]
         return render_template("scan.html",
-            scan_results=app.state["scan_results"],
+            scan_results=results[-20:],
             scan_in_progress=app.state["scan_in_progress"],
         )
 
     @app.route("/sessions")
     def sessions_page():
         """Página de sesiones."""
-        sessions = []
-        if app.state.get("session_manager"):
-            try:
-                sessions = app.state["session_manager"].list_sessions()
-            except Exception:
-                pass
-        return render_template("sessions.html", sessions=sessions)
+        return render_template("sessions.html", sessions=list_saved_sessions())
 
     @app.route("/reports")
     def reports_page():
         """Página de reportes."""
-        reports_dir = Path("reports")
-        reports = []
-        if reports_dir.exists():
-            for f in sorted(reports_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
-                if f.suffix in (".html", ".json", ".txt"):
-                    reports.append({
-                        "name": f.name,
-                        "path": str(f),
-                        "size": f.stat().st_size,
-                        "modified": datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
-                        "type": f.suffix[1:].upper(),
-                    })
-        return render_template("reports.html", reports=reports[:50])
+        return render_template("reports.html", reports=list_reports()[:50])
 
     @app.route("/api")
     def api_docs():
@@ -289,30 +339,21 @@ def _register_routes(app):
     @app.route("/about")
     def about_page():
         """Página Acerca de."""
+        from bluesky import __version__
         modules = get_modules()
-        severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-        target_counts = {"classic": 0, "ble": 0, "both": 0, "android": 0}
-        for m in modules:
-            sev = m.get("severity", "medium")
-            if sev in severity_counts:
-                severity_counts[sev] += 1
-            ttype = m.get("target_type", "classic")
-            if ttype in target_counts:
-                target_counts[ttype] += 1
-
         return render_template("about.html",
-            version="0.2.0",
+            version=__version__,
             modules_count=len(modules),
-            severity_counts=severity_counts,
-            target_counts=target_counts,
+            severity_counts=severity_counts_of(modules),
+            target_counts=target_counts_of(modules),
         )
 
     @app.route("/logs")
     def logs_page():
         """Página de logs."""
-        return render_template("logs.html",
-            web_log=app.state["web_log"],
-        )
+        with app.state["lock"]:
+            entries = list(app.state["web_log"])
+        return render_template("logs.html", web_log=entries[-150:])
 
     # ─── API REST ───────────────────────────────────────────────────────────
 
@@ -322,6 +363,8 @@ def _register_routes(app):
         caps = get_capabilities()
         info = app.state.get("platform_info", {})
         modules = get_modules()
+        with app.state["lock"]:
+            log_count = len(app.state["web_log"])
         return jsonify({
             "status": "ok",
             "uptime": get_uptime(),
@@ -332,14 +375,13 @@ def _register_routes(app):
             "scan_in_progress": app.state["scan_in_progress"],
             "last_scan": (app.state["last_scan_time"].isoformat()
                          if app.state["last_scan_time"] else None),
-            "web_log_count": len(app.state["web_log"]),
+            "web_log_count": log_count,
         })
 
     @app.route("/api/modules")
     def api_modules():
         """Lista de módulos."""
-        modules = get_modules()
-        return jsonify(modules)
+        return jsonify(get_modules())
 
     @app.route("/api/modules/<name>")
     def api_module_detail(name: str):
@@ -353,39 +395,63 @@ def _register_routes(app):
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
+    @app.route("/api/modules/<name>/education")
+    def api_module_education(name: str):
+        """Contenido educativo de un módulo."""
+        try:
+            from bluesky.core.education import get_education
+            entry = get_education(name)
+        except Exception:
+            entry = None
+        if entry is None:
+            return jsonify({"error": f"Sin contenido educativo para '{name}'"}), 404
+        return jsonify(entry)
+
     @app.route("/api/modules/<name>/run", methods=["POST"])
     def api_module_run(name: str):
-        """Ejecuta un módulo."""
+        """Ejecuta un módulo en background (thread-safe)."""
         if not app.state["engine"]:
             return jsonify({"error": "Engine no disponible"}), 500
 
         data = request.get_json(silent=True) or {}
-        target = data.get("target", "")
+        if not isinstance(data, dict):
+            data = {}
+        target = str(data.get("target", "") or "")
         options = data.get("options", {})
+        if not isinstance(options, dict):
+            options = {}
 
         add_log("info", f"Ejecutando módulo: {name} target={target}")
 
         def run_in_thread():
-            app.state["scan_in_progress"] = True
+            with app.state["lock"]:
+                if app.state["scan_in_progress"]:
+                    return  # ya hay una ejecución activa
+                app.state["scan_in_progress"] = True
             try:
-                result = app.state["engine"].run_module(name, target=target, options=options)
-                app.state["scan_results"].append({
-                    "module": name,
-                    "target": target,
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                    "success": result.get("success", False),
-                    "result": result,
-                })
-                app.state["last_scan_time"] = datetime.now()
-                status = "✅ exitoso" if result.get("success") else "❌ falló"
+                result = app.state["engine"].run_module(
+                    name, target=target, options=options)
+                with app.state["lock"]:
+                    app.state["scan_results"].append({
+                        "module": name,
+                        "target": target,
+                        "time": datetime.now().strftime("%H:%M:%S"),
+                        "success": bool(result.get("success", False)),
+                        "result": result,
+                    })
+                    if len(app.state["scan_results"]) > MAX_SCAN_RESULTS:
+                        app.state["scan_results"][:] = \
+                            app.state["scan_results"][-MAX_SCAN_RESULTS:]
+                    app.state["last_scan_time"] = datetime.now()
+                status = "exitoso" if result.get("success") else "falló"
                 add_log("info", f"Módulo {name}: {status}")
             except Exception as e:
                 add_log("error", f"Módulo {name}: {e}")
             finally:
-                app.state["scan_in_progress"] = False
+                with app.state["lock"]:
+                    app.state["scan_in_progress"] = False
 
-        thread = threading.Thread(target=run_in_thread, daemon=True)
-        thread.start()
+        threading.Thread(target=run_in_thread, daemon=True).start()
 
         return jsonify({
             "status": "started",
@@ -397,49 +463,60 @@ def _register_routes(app):
     @app.route("/api/scan", methods=["POST"])
     def api_scan():
         """Ejecuta escaneo de dispositivos."""
-        data = request.get_json(silent=True) or {}
-        scanner = data.get("scanner", "device")
-        target = data.get("target", "")
-
-        add_log("info", f"Iniciando escaneo: {scanner}")
-
         if not app.state["engine"]:
             return jsonify({"error": "Engine no disponible"}), 500
 
-        def scan_thread():
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            data = {}
+        scanner = str(data.get("scanner", "device") or "device")
+        target = str(data.get("target", "") or "")
+
+        with app.state["lock"]:
+            if app.state["scan_in_progress"]:
+                return jsonify({"status": "busy",
+                                "message": "Ya hay una operación en curso"}), 409
             app.state["scan_in_progress"] = True
+
+        add_log("info", f"Iniciando escaneo: {scanner}")
+
+        def scan_thread():
             try:
                 result = app.state["engine"].run_module(
                     "scan" if scanner == "device" else "services",
                     target=target,
                 )
-                app.state["scan_results"].append({
-                    "module": scanner,
-                    "target": target or "broadcast",
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                    "success": result.get("success", False),
-                    "result": result,
-                })
-                app.state["last_scan_time"] = datetime.now()
-                add_log("info", f"Escaneo {scanner}: {'✅ completado' if result.get('success') else '❌ falló'}")
+                with app.state["lock"]:
+                    app.state["scan_results"].append({
+                        "module": scanner,
+                        "target": target or "broadcast",
+                        "time": datetime.now().strftime("%H:%M:%S"),
+                        "success": bool(result.get("success", False)),
+                        "result": result,
+                    })
+                    app.state["last_scan_time"] = datetime.now()
+                add_log("info", f"Escaneo {scanner}: "
+                        f"{'completado' if result.get('success') else 'falló'}")
             except Exception as e:
                 add_log("error", f"Escaneo: {e}")
             finally:
-                app.state["scan_in_progress"] = False
+                with app.state["lock"]:
+                    app.state["scan_in_progress"] = False
 
-        thread = threading.Thread(target=scan_thread, daemon=True)
-        thread.start()
+        threading.Thread(target=scan_thread, daemon=True).start()
 
         return jsonify({"status": "started", "message": "Escaneo iniciado"})
 
     @app.route("/api/scan/status")
     def api_scan_status():
         """Estado del escaneo actual."""
+        with app.state["lock"]:
+            recent = list(app.state["scan_results"][-5:])
         return jsonify({
             "in_progress": app.state["scan_in_progress"],
             "last_scan": (app.state["last_scan_time"].isoformat()
                          if app.state["last_scan_time"] else None),
-            "recent_results": app.state["scan_results"][-5:],
+            "recent_results": recent,
         })
 
     @app.route("/api/hardware")
@@ -460,63 +537,56 @@ def _register_routes(app):
     @app.route("/api/sessions")
     def api_sessions():
         """Lista de sesiones."""
-        sessions = []
-        if app.state.get("session_manager"):
-            try:
-                sessions = app.state["session_manager"].list_sessions()
-            except Exception:
-                pass
-        return jsonify(sessions)
+        return jsonify(list_saved_sessions())
 
     @app.route("/api/reports")
     def api_reports():
         """Lista de reportes."""
-        reports_dir = Path("reports")
         reports = []
-        if reports_dir.exists():
-            for f in sorted(reports_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
-                if f.suffix in (".html", ".json", ".txt"):
-                    try:
-                        content = f.read_text(encoding="utf-8", errors="replace")[:5000]
-                    except Exception:
-                        content = ""
-                    reports.append({
-                        "name": f.name,
-                        "path": str(f),
-                        "size": f.stat().st_size,
-                        "modified": datetime.fromtimestamp(f.stat().st_mtime).isoformat(),
-                        "type": f.suffix[1:].upper(),
-                        "preview": content[:500],
-                    })
-        return jsonify(reports[:50])
+        for r in list_reports()[:50]:
+            r = dict(r)
+            r["preview"] = ""
+            try:
+                content = Path(r["path"]).read_text(
+                    encoding="utf-8", errors="replace")[:500]
+                r["preview"] = content
+            except OSError:
+                pass
+            reports.append(r)
+        return jsonify(reports)
 
     @app.route("/api/reports/<path:filename>")
     def api_report_content(filename: str):
-        """Contenido de un reporte."""
-        reports_dir = Path("reports")
-        filepath = reports_dir / filename
-        if not filepath.exists() or not filepath.is_file():
+        """Contenido de un reporte (protegido contra path traversal)."""
+        reports_dir = Path("reports").resolve()
+        filepath = (reports_dir / filename).resolve()
+        # La ruta resuelta DEBE quedar dentro de reports/ — sin esta
+        # comprobación, /api/reports/../../etc/passwd leía archivos
+        # arbitrarios del sistema.
+        if reports_dir not in filepath.parents or not filepath.is_file():
             return jsonify({"error": "Archivo no encontrado"}), 404
         try:
             content = filepath.read_text(encoding="utf-8", errors="replace")
             return jsonify({
-                "name": filename,
+                "name": filepath.name,
                 "content": content,
                 "type": filepath.suffix[1:].upper(),
                 "size": filepath.stat().st_size,
             })
-        except Exception as e:
+        except OSError as e:
             return jsonify({"error": str(e)}), 500
 
     @app.route("/api/logs")
     def api_logs():
         """Logs web."""
         since = request.args.get("since", 0, type=int)
-        logs = app.state["web_log"][since:]
+        with app.state["lock"]:
+            logs = list(app.state["web_log"])
+        entries = logs[max(0, since):]
         return jsonify({
-            "count": len(logs),
-            "entries": logs,
-            "total": len(app.state["web_log"]),
+            "count": len(entries),
+            "entries": entries,
+            "total": len(logs),
         })
 
     @app.route("/api/config")
@@ -543,10 +613,11 @@ def _register_routes(app):
     def server_error(e):
         return render_template("error.html", message="Error interno del servidor"), 500
 
-    # ─── LOG WEBHOOK ────────────────────────────────────────────────────────
+    # ─── LOG INICIAL ────────────────────────────────────────────────────────
 
-    add_log("info", "🌐 bluesky Web Dashboard iniciado")
-    add_log("info", f"Plataforma: {app.state.get('platform_info', {}).get('os_name', 'Desconocida')}")
+    add_log("info", "bluesky Web Dashboard iniciado")
+    add_log("info", f"Plataforma: "
+            f"{app.state.get('platform_info', {}).get('os_name', 'Desconocida')}")
     add_log("info", f"Módulos cargados: {len(get_modules())}")
 
 
@@ -574,6 +645,12 @@ def run_web_server(port: int = 5000, host: str = "127.0.0.1", debug: bool = Fals
     reports_dir.mkdir(exist_ok=True)
 
     url = f"http://{host}:{port}"
+    modules_count = 0
+    if app.state.get("engine"):
+        try:
+            modules_count = len(app.state["engine"].list_modules())
+        except Exception:
+            pass
 
     print(f"""
   ╔══════════════════════════════════════════╗
@@ -581,9 +658,9 @@ def run_web_server(port: int = 5000, host: str = "127.0.0.1", debug: bool = Fals
   ╚══════════════════════════════════════════╝
 
   📡 Servidor: {url}
-  📁 Reportes: {Path('reports').absolute()}
+  📁 Reportes: {reports_dir.absolute()}
   🖥️  Plataforma: {app.state.get('platform_info', {}).get('os_name', '?')}
-  📦 Módulos: {len(app.state.get('engine', app).list_modules() if hasattr(app.state.get('engine'), 'list_modules') else [])}
+  📦 Módulos: {modules_count}
 
   Presiona Ctrl+C para detener
     """)
@@ -599,7 +676,7 @@ def run_web_server(port: int = 5000, host: str = "127.0.0.1", debug: bool = Fals
         print(f"  ❌ Error al iniciar servidor: {e}")
         if "address already in use" in str(e).lower():
             print(f"     El puerto {port} ya está en uso.")
-            print(f"     Usa: bluesky web --port 8080")
+            print("     Usa: bluesky web --port 8080")
 
 
 if __name__ == "__main__":

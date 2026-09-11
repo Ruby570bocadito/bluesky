@@ -4,7 +4,7 @@ Tests unitarios para Termux Bluetooth Backend (utils/termux_backend.py)
 
 import sys
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -199,5 +199,4 @@ class TestTermuxBackendMocked(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import json
     unittest.main(verbosity=2)

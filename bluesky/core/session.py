@@ -4,10 +4,9 @@ Permite guardar/cargar el estado de una auditoría.
 """
 
 import json
-import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List
 
 
 class Session:
@@ -43,9 +42,9 @@ class Session:
             **extra,
         }
 
-        # Evitar duplicados por MAC
+        # Evitar duplicados por MAC (tolerando targets malformados de un JSON cargado)
         for i, t in enumerate(self.targets):
-            if t["mac"] == mac:
+            if isinstance(t, dict) and t.get("mac") == mac:
                 self.targets[i]["last_seen"] = datetime.now().isoformat()
                 self.targets[i]["rssi"] = rssi
                 return self.targets[i]
@@ -82,7 +81,12 @@ class Session:
         self.session_file.write_text(json.dumps(data, indent=2, default=str))
 
     def load(self, name: str = None) -> bool:
-        """Carga una sesión desde disco."""
+        """Carga una sesión desde disco.
+
+        Returns:
+            True si se cargó, False si no existe o está corrupta
+            (una sesión corrupta no debe crashear la consola al arrancar).
+        """
         if name:
             self.name = name
             self.session_file = self.base_dir / f"{name}.json"
@@ -90,14 +94,21 @@ class Session:
         if not self.session_file.exists():
             return False
 
-        data = json.loads(self.session_file.read_text())
+        try:
+            data = json.loads(self.session_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            # Fichero corrupto/ilegible: conservar el estado en memoria y
+            # reportar "no cargada" en lugar de lanzar una excepción.
+            return False
+        if not isinstance(data, dict):
+            return False
         self.name = data.get("name", self.name)
         self.created_at = data.get("created_at", self.created_at)
         self.updated_at = data.get("updated_at", self.updated_at)
-        self.targets = data.get("targets", [])
-        self.results = data.get("results", [])
+        self.targets = data.get("targets", []) if isinstance(data.get("targets"), list) else []
+        self.results = data.get("results", []) if isinstance(data.get("results"), list) else []
         self.notes = data.get("notes", "")
-        self.config = data.get("config", {})
+        self.config = data.get("config", {}) if isinstance(data.get("config"), dict) else {}
         return True
 
     def summary(self) -> dict:
@@ -108,8 +119,12 @@ class Session:
             "updated_at": self.updated_at,
             "total_targets": len(self.targets),
             "total_results": len(self.results),
-            "successful_attacks": sum(1 for r in self.results if r.get("success")),
-            "failed_attacks": sum(1 for r in self.results if not r.get("success")),
+            "successful_attacks": sum(
+                1 for r in self.results if isinstance(r, dict) and r.get("success")
+            ),
+            "failed_attacks": sum(
+                1 for r in self.results if isinstance(r, dict) and not r.get("success")
+            ),
             "targets": self.targets,
         }
 

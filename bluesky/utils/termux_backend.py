@@ -26,18 +26,14 @@ Referencia:
 
 from __future__ import annotations
 
-import os
 import re
-import sys
 import json
-import time
-import shutil
 import logging
 import subprocess
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from pathlib import Path
 
-from .platform import is_termux, check_bleak, check_command
+from .platform import check_bleak, check_command
 
 log = logging.getLogger("bluesky.termux")
 

@@ -9,11 +9,11 @@ import re
 import shutil
 import subprocess
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from bluesky.utils.platform import (
     is_windows, is_termux, is_wsl, is_root as platform_is_root,
-    get_platform, get_os_name, check_bleak, check_command,
+    get_platform, check_bleak,
 )
 
 log = logging.getLogger("bluesky.hardware")
@@ -273,7 +273,7 @@ class HardwareDetector:
 
         try:
             from bluesky.utils.windows_backend import (
-                get_bluetooth_status, get_radio_info, list_paired_devices
+                get_bluetooth_status, get_radio_info
             )
             status = get_bluetooth_status()
             info["available"] = status.get("available", False)
@@ -313,7 +313,7 @@ class HardwareDetector:
         }
 
         try:
-            from bluesky.utils.termux_backend import get_status, list_adapters
+            from bluesky.utils.termux_backend import get_status
             status = get_status()
             info["available"] = status.get("bluetooth_enabled", False)
             info["powered"] = status.get("bluetooth_enabled", False)
@@ -525,8 +525,19 @@ def _check_usb_vendor_windows(vendor_ids: List[str]) -> bool:
         return False
 
 
-def _check_usb_product(product_name: str) -> bool:
-    """Verifica si hay un dispositivo USB con nombre de producto específico."""
+def _check_usb_product(product_name: "str | List[str]") -> bool:
+    """Verifica si hay un dispositivo USB con nombre de producto específico.
+
+    Acepta un string único o una lista de nombres (p.ej. ["rtl8761"]).
+    """
+    if isinstance(product_name, (list, tuple)):
+        return any(_check_usb_product_single(p) for p in product_name)
+    return _check_usb_product_single(product_name)
+
+
+def _check_usb_product_single(product_name: str) -> bool:
+    if not isinstance(product_name, str) or not product_name:
+        return False
     if is_windows():
         return _check_usb_product_windows(product_name)
     return _check_usb_product_linux(product_name)

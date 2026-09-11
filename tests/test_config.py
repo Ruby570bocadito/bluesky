@@ -5,14 +5,12 @@ import json
 import os
 import tempfile
 import pytest
-from pathlib import Path
 from bluesky.utils.config import (
     BlueskyConfig,
     get_config,
     parse_key_value,
     ConfigError,
     ConfigValidationError,
-    DEFAULT_CONFIG,
 )
 
 

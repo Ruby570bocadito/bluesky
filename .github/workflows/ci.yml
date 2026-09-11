@@ -21,20 +21,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff black
+          pip install ruff
 
-      - name: Check formatting
+      - name: Lint (real, blocking)
         run: |
-          black --check bluesky/ tests/ 2>/dev/null || echo "black check skipped"
-
-      - name: Lint
-        run: |
-          ruff check bluesky/ tests/ 2>/dev/null || echo "ruff check skipped"
-
-      - name: Type check
-        run: |
-          pip install mypy
-          mypy bluesky/ --ignore-missing-imports --allow-untyped-defs 2>/dev/null || echo "mypy check skipped"
+          ruff check bluesky/ tests/ plugins/ --select F,E9 --no-cache
 
   test:
     name: Unit Tests

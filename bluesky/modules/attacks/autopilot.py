@@ -10,10 +10,9 @@ Modos:
 Requiere: ModuleEngine para cargar módulos dinámicamente.
 """
 
-import time
 import sys
 import subprocess
-from typing import Optional, List, Dict
+from typing import List, Dict
 from datetime import datetime
 from pathlib import Path
 
@@ -50,10 +49,13 @@ class Autopilot(BaseModule):
     def run(self):
         """Ejecuta el pipeline completo autopilot."""
         target = self.target
-        mode = self.options.get("MODE", "full").lower()
-        custom_chain = self.options.get("CHAIN", "")
-        generate_report = self.options.get("REPORT", "true").lower() == "true"
-        timeout = int(self.options.get("TIMEOUT", "30"))
+        mode = str(self.options.get("MODE") or "full").lower()
+        custom_chain = str(self.options.get("CHAIN") or "")
+        generate_report = str(self.options.get("REPORT") or "true").lower() == "true"
+        try:
+            timeout = int(self.options.get("TIMEOUT") or 30)
+        except (TypeError, ValueError):
+            timeout = 30
 
         self.result["data"]["mode"] = mode
         self.result["data"]["start_time"] = datetime.now().isoformat()
@@ -68,7 +70,7 @@ class Autopilot(BaseModule):
             # ── FASE 1: Escaneo ──────────────────────────────────────
             self.result["data"]["current_step"] = "Escaneando dispositivos..."
             print(f"\n  {'='*55}")
-            print(f"  ⚡ BLUESKY AUTOPILOT v2.0")
+            print("  ⚡ BLUESKY AUTOPILOT v2.0")
             print(f"  {'='*55}")
             print(f"  Modo:    {mode.upper()}")
             print(f"  Target:  {target or 'AUTO (todos)'}")
@@ -146,7 +148,7 @@ class Autopilot(BaseModule):
             print(f"  [1/4] 📡 Usando target específico: {target}")
             return [{"mac": target, "name": target, "type": "unknown"}]
 
-        print(f"  [1/4] 📡 Escaneando dispositivos Bluetooth...")
+        print("  [1/4] 📡 Escaneando dispositivos Bluetooth...")
         devices = []
 
         try:
@@ -186,7 +188,7 @@ class Autopilot(BaseModule):
             for d in devices[:5]:
                 print(f"     🔵 {d['mac']} - {d['name']}")
         else:
-            print(f"  ⚠️ No se encontraron dispositivos")
+            print("  ⚠️ No se encontraron dispositivos")
 
         return devices
 
@@ -214,12 +216,12 @@ class Autopilot(BaseModule):
                 if len(found) > 5:
                     print(f"        ... y {len(found)-5} más")
             else:
-                print(f"     ✅ No se encontraron vulnerabilidades")
+                print("     ✅ No se encontraron vulnerabilidades")
 
             return found
 
         except ImportError:
-            print(f"     ⚠️ Escáner de vulnerabilidades no disponible")
+            print("     ⚠️ Escáner de vulnerabilidades no disponible")
             return []
         except Exception as e:
             print(f"     ⚠️ Error en detección: {e}")
@@ -261,7 +263,7 @@ class Autopilot(BaseModule):
         """Ejecuta la cadena de ataques contra los targets."""
         results = {}
 
-        print(f"\n  [3/4] ⚔️ Ejecutando cadena de ataques...")
+        print("\n  [3/4] ⚔️ Ejecutando cadena de ataques...")
         print(f"  Chain: {' → '.join(chain)}")
         print()
 
@@ -301,7 +303,7 @@ class Autopilot(BaseModule):
     def _phase_report(self, targets: List[dict], results: Dict[str, List[dict]],
                       all_vulns: dict) -> str:
         """Genera reporte HTML del autopilot."""
-        print(f"  [4/4] 📊 Generando reporte...")
+        print("  [4/4] 📊 Generando reporte...")
 
         report_dir = Path("reports")
         report_dir.mkdir(exist_ok=True)
@@ -462,7 +464,7 @@ class Autopilot(BaseModule):
             lines.append(f"    Exitosos: {sum(1 for r in target_results if r.get('success'))}")
 
             if found_vulns:
-                lines.append(f"    Vulnerabilidades:")
+                lines.append("    Vulnerabilidades:")
                 for v in found_vulns:
                     icon = "🔴" if v["severity"] == "critical" else "🟡"
                     lines.append(f"      {icon} {v['id']} ({v['severity']})")

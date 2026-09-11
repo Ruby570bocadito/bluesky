@@ -24,9 +24,8 @@ from __future__ import annotations
 
 import subprocess
 import shutil
-import struct
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import List, Tuple
 
 from bluesky.core.engine import BaseModule
 
@@ -44,6 +43,23 @@ try:
         HCI_Cmd_Set_Connection_Encryption,
     )
     from scapy.layers.bluetooth4LE import (
+        BTLE, BTLE_ADV, BTLE_SCAN_REQ, BTLE_SCAN_RSP,
+        BTLE_CONNECT_REQ, BTLE_DATA,
+        LL_PAUSE_ENC_REQ, LL_PAUSE_ENC_RSP,
+        LL_ENC_REQ, LL_ENC_RSP, LL_START_ENC_REQ, LL_START_ENC_RSP,
+        LL_UNKNOWN_RSP, LL_FEATURE_REQ, LL_FEATURE_RSP,
+        LL_VERSION_IND, LL_REJECT_EXT_IND,
+    )
+    # Sondeo de disponibilidad: el resto de clases se importan para verificar
+    # que esta versión de scapy soporta todos los objetos del ataque.
+    _SCAPY_PROBE = (
+        HCI_Hdr, HCI_Event_Hdr, HCI_Event_Command_Complete,
+        HCI_Event_Connection_Complete, HCI_Event_Encryption_Change,
+        HCI_Event_Disconnection_Complete,
+        HCI_ACL_Hdr, L2CAP_Hdr, L2CAP_ConfReq, L2CAP_ConfResp,
+        HCI_Cmd_Read_BD_Addr, HCI_Cmd_Reset, HCI_Cmd_Write_Connect_Accept_Timeout,
+        SM_Pairing_Request, SM_Pairing_Response, SM_Hdr,
+        HCI_Cmd_Set_Connection_Encryption,
         BTLE, BTLE_ADV, BTLE_SCAN_REQ, BTLE_SCAN_RSP,
         BTLE_CONNECT_REQ, BTLE_DATA,
         LL_PAUSE_ENC_REQ, LL_PAUSE_ENC_RSP,
@@ -395,9 +411,9 @@ class Bluffs(BaseModule):
                 )
             else:
                 self.result["data"]["message"] = (
-                    f"⚠️  BLUFFS - Ataque completado sin éxito.\n"
-                    f"   El dispositivo puede estar parcheado o no ser vulnerable.\n"
-                    f"   Revisa los stages para más detalles."
+                    "⚠️  BLUFFS - Ataque completado sin éxito.\n"
+                    "   El dispositivo puede estar parcheado o no ser vulnerable.\n"
+                    "   Revisa los stages para más detalles."
                 )
 
         finally:
@@ -408,9 +424,9 @@ class Bluffs(BaseModule):
 
     def _no_scapy_result(self, mac: str) -> dict:
         self.result["data"]["message"] = (
-            f"⚠️  BLUFFS activo requiere scapy.\n"
-            f"   Instala: pip install scapy\n"
-            f"   O usa detección pasiva sin EXECUTE=True"
+            "⚠️  BLUFFS activo requiere scapy.\n"
+            "   Instala: pip install scapy\n"
+            "   O usa detección pasiva sin EXECUTE=True"
         )
         self.result["data"]["attack_result"] = "unavailable"
         self.result["success"] = True

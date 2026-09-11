@@ -1,291 +1,145 @@
 {% extends "base.html" %}
-{% block title %}Bluesky Dashboard{% endblock %}
+{% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col">
-        <h1 class="display-6">
-            <i class="bi bi-speedometer2 text-primary"></i> Dashboard
-            <small class="text-muted fs-6">Panel de control de Bluesky</small>
-        </h1>
-    </div>
+<div class="page-head">
+  <div>
+    <div class="micro">Dashboard</div>
+    <div class="page-title">Estado del sistema</div>
+    <div class="page-sub">Uptime {{ uptime }} · plataforma {{ info.get('os_name', 'desconocida') }}</div>
+  </div>
+  <span class="pill" id="scan-pill">
+    <span class="dot {{ 'busy' if scan_in_progress else 'live' }}"></span>
+    {{ 'Escaneo en curso' if scan_in_progress else 'Listo' }}
+  </span>
 </div>
 
-<!-- Status Cards Row -->
-<div class="row mb-4 g-3">
-    <div class="col-md-3">
-        <div class="card border-primary h-100">
-            <div class="card-body text-center">
-                <i class="bi bi-puzzle display-3 text-primary"></i>
-                <h3 class="mt-2">{{ modules_count }}</h3>
-                <p class="text-muted mb-0">Módulos cargados</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card border-{{ 'success' if caps.bluetooth_available else 'danger' }} h-100">
-            <div class="card-body text-center">
-                <i class="bi bi-bluetooth display-3 text-{{ 'success' if caps.bluetooth_available else 'danger' }}"></i>
-                <h3 class="mt-2">{{ 'Disponible' if caps.bluetooth_available else 'No detectado' }}</h3>
-                <p class="text-muted mb-0">Bluetooth</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card border-{{ 'success' if caps.is_root else 'warning' }} h-100">
-            <div class="card-body text-center">
-                <i class="bi bi-shield-lock display-3 text-{{ 'success' if caps.is_root else 'warning' }}"></i>
-                <h3 class="mt-2">{{ 'Root' if caps.is_root else 'Usuario' }}</h3>
-                <p class="text-muted mb-0">Privilegios</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card border-info h-100">
-            <div class="card-body text-center">
-                <i class="bi bi-clock display-3 text-info"></i>
-                <h3 class="mt-2">{{ uptime }}</h3>
-                <p class="text-muted mb-0">Uptime</p>
-            </div>
-        </div>
-    </div>
+<div class="grid-4">
+  <div class="card stat">
+    <span class="micro">Módulos</span>
+    <div class="num">{{ modules_total }}</div>
+    <div class="hint">ataques, escáneres y exploits</div>
+  </div>
+  <div class="card stat">
+    <span class="micro">Adaptadores BT</span>
+    <div class="num">{{ caps.get('adapters', 0) if caps is defined else 0 }}</div>
+    <div class="hint">{{ caps.get('interface', '—') if caps else 'sin hardware' }}</div>
+  </div>
+  <div class="card stat">
+    <span class="micro">BLE</span>
+    <div class="num">{{ 'Sí' if caps and caps.get('ble_support') else 'No' }}</div>
+    <div class="hint">soporte del entorno</div>
+  </div>
+  <div class="card stat">
+    <span class="micro">Root / Admin</span>
+    <div class="num">{{ 'Sí' if caps and caps.get('is_root') else 'No' }}</div>
+    <div class="hint">privilegios para ataques a bajo nivel</div>
+  </div>
 </div>
 
-<div class="row g-3">
-    <!-- Platform Info -->
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-header">
-                <i class="bi bi-info-circle"></i> Información del Sistema
-            </div>
-            <div class="card-body">
-                <table class="table table-sm table-borderless">
-                    <tr>
-                        <td class="text-muted">Plataforma:</td>
-                        <td><span class="badge bg-{{ 'primary' if info.platform == 'linux' else 'success' if info.platform == 'windows' else 'info' }}">
-                            {{ info.os_name or info.platform }}
-                        </span></td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">BLE:</td>
-                        <td>
-                            {% if caps.bleak_available %}
-                                <span class="badge bg-success">✅ bleak</span>
-                            {% else %}
-                                <span class="badge bg-secondary">❌ bleak</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Adaptador:</td>
-                        <td>{{ caps.interface or 'N/A' }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">MAC:</td>
-                        <td><code>{{ caps.mac or 'N/A' }}</code></td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">WSL:</td>
-                        <td>{% if info.is_wsl %}<span class="badge bg-warning">Sí</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted">Backends:</td>
-                        <td>
-                            {% for bk, avail in info.backends.items() %}
-                                <span class="badge bg-{{ 'success' if avail else 'secondary' }} me-1">{{ bk }}</span>
-                            {% endfor %}
-                        </td>
-                    </tr>
-                </table>
-            </div>
-        </div>
+<div class="grid-2" style="margin-top:16px">
+  <div class="card">
+    <div class="card-title">Distribución por severidad <span class="micro">{{ modules_total }} módulos</span></div>
+    <div class="sevbar" aria-label="Distribución de severidad">
+      {% set total_sev = severity_counts.get('critical',0) + severity_counts.get('high',0) + severity_counts.get('medium',0) + severity_counts.get('low',0) %}
+      {% if total_sev %}
+      <span class="s-critical" style="width: {{ (severity_counts.get('critical',0) * 100 / total_sev) | round(1) }}%"></span>
+      <span class="s-high" style="width: {{ (severity_counts.get('high',0) * 100 / total_sev) | round(1) }}%"></span>
+      <span class="s-medium" style="width: {{ (severity_counts.get('medium',0) * 100 / total_sev) | round(1) }}%"></span>
+      <span class="s-low" style="width: {{ (severity_counts.get('low',0) * 100 / total_sev) | round(1) }}%"></span>
+      {% endif %}
     </div>
+    <div class="sev-legend">
+      <span class="sev critical">{{ severity_counts.get('critical',0) }} crítica</span>
+      <span class="sev high">{{ severity_counts.get('high',0) }} alta</span>
+      <span class="sev medium">{{ severity_counts.get('medium',0) }} media</span>
+      <span class="sev low">{{ severity_counts.get('low',0) }} baja</span>
+    </div>
+  </div>
 
-    <!-- Module Statistics -->
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-header">
-                <i class="bi bi-pie-chart"></i> Estadísticas de Módulos
-            </div>
-            <div class="card-body">
-                <canvas id="severityChart" height="200"></canvas>
-                <hr>
-                <div class="row text-center small">
-                    <div class="col-3">
-                        <span class="badge bg-danger d-block p-2 mb-1">{{ severity_counts.critical }}</span>
-                        Críticos
-                    </div>
-                    <div class="col-3">
-                        <span class="badge bg-warning d-block p-2 mb-1">{{ severity_counts.high }}</span>
-                        Altos
-                    </div>
-                    <div class="col-3">
-                        <span class="badge bg-info d-block p-2 mb-1">{{ severity_counts.medium }}</span>
-                        Medios
-                    </div>
-                    <div class="col-3">
-                        <span class="badge bg-secondary d-block p-2 mb-1">{{ severity_counts.low }}</span>
-                        Bajos
-                    </div>
-                </div>
-            </div>
-        </div>
+  <div class="card">
+    <div class="card-title">Tipos de objetivo</div>
+    <div class="kv">
+      <span class="k">Classic (BR/EDR)</span>
+      <span class="v">{{ target_counts.get('classic', 0) }} módulo{{ '' if target_counts.get('classic', 0) == 1 else 's' }}</span>
+      <span class="k">BLE</span>
+      <span class="v">{{ target_counts.get('ble', 0) }} módulo{{ '' if target_counts.get('ble', 0) == 1 else 's' }}</span>
+      <span class="k">Ambos</span>
+      <span class="v">{{ target_counts.get('both', 0) }} módulo{{ '' if target_counts.get('both', 0) == 1 else 's' }}</span>
+      <span class="k">Android</span>
+      <span class="v">{{ target_counts.get('android', 0) }} módulo{{ '' if target_counts.get('android', 0) == 1 else 's' }}</span>
     </div>
-
-    <!-- Recent Activity -->
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-activity"></i> Actividad Reciente</span>
-                <a href="{{ url_for('logs_page') }}" class="btn btn-sm btn-outline-secondary">Ver todo</a>
-            </div>
-            <div class="card-body p-0">
-                <div class="list-group list-group-flush" style="max-height: 350px; overflow-y: auto;">
-                    {% for entry in web_log[:15] %}
-                    <div class="list-group-item py-2 px-3">
-                        <small class="text-muted">{{ entry.time }}</small>
-                        <span class="badge bg-{{ 'success' if entry.level == 'info' else 'danger' if entry.level == 'error' else 'warning' }} ms-1">{{ entry.level }}</span>
-                        <span class="ms-1">{{ entry.message }}</span>
-                    </div>
-                    {% else %}
-                    <div class="list-group-item text-muted text-center py-4">
-                        <i class="bi bi-inbox"></i> Sin actividad reciente
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-    </div>
+  </div>
 </div>
 
-<!-- Recent Scan Results -->
-<div class="row mt-3">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-search"></i> Últimos Escaneos</span>
-                <a href="{{ url_for('scan_page') }}" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-plus-circle"></i> Nuevo escaneo
-                </a>
-            </div>
-            <div class="card-body p-0">
-                {% if scan_results %}
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Hora</th>
-                                <th>Módulo</th>
-                                <th>Target</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for r in scan_results %}
-                            <tr>
-                                <td><small class="text-muted">{{ r.time }}</small></td>
-                                <td><code>{{ r.module }}</code></td>
-                                <td><small>{{ r.target or '—' }}</small></td>
-                                <td>
-                                    {% if r.success %}
-                                    <span class="badge bg-success">✅ Éxito</span>
-                                    {% else %}
-                                    <span class="badge bg-danger">❌ Fallo</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center text-muted py-4">
-                    <i class="bi bi-search display-6 d-block mb-2"></i>
-                    <p>Aún no se han realizado escaneos.</p>
-                    <a href="{{ url_for('scan_page') }}" class="btn btn-primary">
-                        <i class="bi bi-play"></i> Iniciar escaneo
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
+<div class="card" style="margin-top:16px">
+  <div class="card-title">Módulos <a class="textlink" href="/modules">ver todos →</a></div>
+  {% if modules %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Módulo</th><th>Descripción</th><th>Severidad</th><th>CVE</th></tr>
+      </thead>
+      <tbody>
+        {% for m in modules %}
+        <tr>
+          <td><a href="/modules/{{ m.get('name','') }}">{{ m.get('name','?') }}</a></td>
+          <td class="desc-cell">{{ m.get('description','')[:88] }}{% if m.get('description','') | length > 88 %}…{% endif %}</td>
+          <td><span class="sev {{ m.get('severity','low') }}">{{ m.get('severity','—') }}</span></td>
+          <td class="mono">{{ m.get('cve','') or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">No hay módulos cargados.</div>
+  {% endif %}
 </div>
 
-<!-- Target Type Distribution -->
-<div class="row mt-3">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-bar-chart"></i> Distribución por Tipo de Target
-            </div>
-            <div class="card-body">
-                <div class="row text-center">
-                    <div class="col-3">
-                        <div class="border rounded p-3">
-                            <i class="bi bi-phone display-6 text-primary"></i>
-                            <h4>{{ target_counts.classic }}</h4>
-                            <small class="text-muted">Classic (BR/EDR)</small>
-                        </div>
-                    </div>
-                    <div class="col-3">
-                        <div class="border rounded p-3">
-                            <i class="bi bi-bluetooth display-6 text-info"></i>
-                            <h4>{{ target_counts.ble }}</h4>
-                            <small class="text-muted">BLE</small>
-                        </div>
-                    </div>
-                    <div class="col-3">
-                        <div class="border rounded p-3">
-                            <i class="bi bi-arrow-left-right display-6 text-success"></i>
-                            <h4>{{ target_counts.both }}</h4>
-                            <small class="text-muted">Ambos</small>
-                        </div>
-                    </div>
-                    <div class="col-3">
-                        <div class="border rounded p-3">
-                            <i class="bi bi-robot display-6 text-warning"></i>
-                            <h4>{{ target_counts.android }}</h4>
-                            <small class="text-muted">Android</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Resultados recientes <a class="textlink" href="/scan">escanear →</a></div>
+    {% if scan_results %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Hora</th><th>Módulo</th><th>Target</th><th>Estado</th></tr></thead>
+        <tbody>
+          {% for r in scan_results | reverse %}
+          <tr>
+            <td class="mono">{{ r.get('time','') }}</td>
+            <td>{{ r.get('module','') }}</td>
+            <td class="mono">{{ r.get('target','') or 'broadcast' }}</td>
+            <td>{% if r.get('success') %}<span class="badge ok">OK</span>{% else %}<span class="badge danger">Fallo</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-</div>
-{% endblock %}
+    {% else %}
+    <div class="empty"><span class="big">📡</span>Aún no hay resultados. Lanza un escaneo desde la pestaña Escaneo.</div>
+    {% endif %}
+  </div>
 
-{% block extra_scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Severity Chart
-    const ctx = document.getElementById('severityChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Críticos', 'Altos', 'Medios', 'Bajos'],
-            datasets: [{
-                data: [
-                    {{ severity_counts.critical }},
-                    {{ severity_counts.high }},
-                    {{ severity_counts.medium }},
-                    {{ severity_counts.low }}
-                ],
-                backgroundColor: ['#dc3545', '#fd7e14', '#0dcaf0', '#6c757d'],
-                borderWidth: 0,
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: { color: '#adb5bd', boxWidth: 10, padding: 8 }
-                }
-            }
-        }
-    });
-});
-</script>
+  <div class="card">
+    <div class="card-title">Actividad <a class="textlink" href="/logs">log completo →</a></div>
+    {% if web_log %}
+    <div class="table-wrap">
+      <table>
+        <tbody>
+          {% for e in web_log | reverse %}
+          <tr>
+            <td class="mono faint">{{ e.get('time','') }}</td>
+            <td class="log-level {{ e.get('level','info') }}">{{ e.get('level','info') }}</td>
+            <td>{{ e.get('message','') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">Sin actividad registrada.</div>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}

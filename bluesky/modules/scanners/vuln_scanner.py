@@ -8,10 +8,9 @@ Reporta un perfil de vulnerabilidad completo con severidad, CVE,
 y qué módulo de ataque usar para explotar cada una.
 """
 
-import re
 import sys
 import subprocess
-from typing import Dict, List, Optional, Tuple
+from typing import List, Tuple
 from datetime import datetime
 
 from bluesky.core.engine import BaseModule
@@ -263,8 +262,8 @@ class VulnScanner(BaseModule):
     def run(self):
         """Ejecuta el escáner de vulnerabilidades."""
         target = self.target
-        scan_type = self.options.get("SCAN_TYPE", "full").lower()
-        generate_report = self.options.get("REPORT", "false").lower() == "true"
+        scan_type = str(self.options.get("SCAN_TYPE") or "full").lower()
+        generate_report = str(self.options.get("REPORT") or "false").lower() == "true"
 
         if not target:
             return self._scan_and_prompt()
@@ -613,7 +612,6 @@ class VulnScanner(BaseModule):
     def _generate_report(self, target: str, all_vulns: List[dict],
                          found: List[dict], device_info: dict) -> str:
         """Genera un reporte HTML."""
-        import json
         from pathlib import Path
 
         report_dir = Path("reports")

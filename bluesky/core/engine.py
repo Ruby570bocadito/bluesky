@@ -3,9 +3,8 @@ ModuleEngine - Carga y gestión dinámica de módulos de ataque/escaneo.
 """
 
 import os
-import sys
+import inspect
 import importlib
-import pkgutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Type
 
@@ -55,7 +54,6 @@ class BaseModule:
 
         # Verificar root
         if self.requires_root:
-            import os
             if os.name != "posix" or os.geteuid() != 0:
                 return False, (f"El módulo '{self.name}' requiere privilegios de root. "
                               "Ejecuta con sudo.")
@@ -72,6 +70,21 @@ class BaseModule:
     def run(self):
         """Ejecuta el módulo. Debe ser sobreescrito."""
         raise NotImplementedError
+
+    def _opt_int(self, key: str, default: int) -> int:
+        """Lee una opción numérica de self.options tolerando valores malformados.
+
+        Un valor ausente o vacío devuelve `default`; un valor presente pero no
+        numérico (p.ej. 'abc' llegado por --options) también devuelve `default`
+        en lugar de lanzar ValueError durante __init__.
+        """
+        value = self.options.get(key)
+        if value is None or value == "":
+            return default
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
 
     def get_info(self) -> dict:
         """Retorna información detallada del módulo."""
@@ -111,7 +124,7 @@ class ModuleEngine:
         from bluesky.core.plugin_loader import PluginLoader
         self.plugin_loader = PluginLoader()
         self.plugin_loader.discover()
-        loaded = self.plugin_loader.load_all()
+        self.plugin_loader.load_all()
 
         count = 0
         for name, cls in self.plugin_loader.get_module_classes().items():
@@ -191,11 +204,35 @@ class ModuleEngine:
         """Obtiene una clase de módulo por nombre."""
         return self._modules.get(name.lower())
 
+    @staticmethod
+    def _call_run(module, target: str, options: dict):
+        """Invoca module.run() con target/options solo si su firma los acepta.
+
+        Evita reintentar run() cuando un TypeError se produce DENTRO de la
+        ejecución (ello ejecutaría el módulo dos veces). El fallback a
+        run() sin kwargs solo ocurre si los argumentos no se pueden ligar,
+        en cuyo caso no se ejecutó nada todavía.
+        """
+        run_fn = getattr(module, 'run', None)
+        if run_fn is None:
+            raise NotImplementedError(f"{module!r} no define run()")
+        call_kwargs = {"target": target, "options": options}
+        try:
+            inspect.signature(run_fn).bind(**call_kwargs)
+        except TypeError:
+            # El módulo no acepta target/options extra (aún no ejecutó nada)
+            return run_fn()
+        return run_fn(**call_kwargs)
+
     def run_module(self, name: str, target: str = "", options: dict = None) -> dict:
-        """Ejecuta un módulo por nombre."""
+        """Ejecuta un módulo por nombre.
+
+        Todos los resultados comparten el mismo shape:
+            {"success": bool, "data": dict, "error": str|None}
+        """
         cls = self.get_module(name)
         if not cls:
-            return {"success": False, "error": f"Módulo '{name}' no encontrado"}
+            return {"success": False, "data": {}, "error": f"Módulo '{name}' no encontrado"}
 
         options = options or {}
 
@@ -207,27 +244,31 @@ class ModuleEngine:
             module = cls()
             if target and hasattr(module, 'set_target'):
                 module.set_target(target)
+        except ValueError as e:
+            # El __init__ del módulo rechazó las opciones (p.ej. un int() con
+            # valor no numérico). No reintentamos: devolvemos error limpio.
+            return {"success": False, "data": {},
+                    "error": f"Opciones inválidas para '{name}': {e}"}
 
         # Verificar prerequisitos (solo si es BaseModule)
         ok, msg = True, ""
         if hasattr(module, 'check_prerequisites'):
             try:
                 ok, msg = module.check_prerequisites()
-            except TypeError:
+            except (TypeError, AttributeError):
+                # TypeError: interfaz de plugin no estándar.
+                # AttributeError: plataforma sin símbolos usados por el check
+                # (p.ej. os.geteuid en Windows). Degradar sin crashear.
                 ok, msg = True, ""
 
         if not ok:
-            return {"success": False, "error": msg}
+            return {"success": False, "data": {}, "error": msg}
 
         try:
-            if hasattr(module, 'run'):
-                try:
-                    result = module.run(target=target, options=options)
-                except TypeError:
-                    # El módulo no acepta target/options extra
-                    result = module.run()
-            else:
-                result = module.run()
+            result = self._call_run(module, target, options)
             return result
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            # Contrato de resultados: TODOS los resultados comparten el shape
+            # {"success", "data", "error"}. Sin "data", los consumidores
+            # (web/console/reporter) que hacen result["data"] reventan.
+            return {"success": False, "data": {}, "error": str(e)}

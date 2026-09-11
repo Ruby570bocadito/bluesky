@@ -4,7 +4,6 @@ Funciona con Bluetooth interno en dispositivos vulnerables (antiguos/sin parches
 """
 
 import subprocess
-from typing import Optional
 
 from bluesky.core.engine import BaseModule
 

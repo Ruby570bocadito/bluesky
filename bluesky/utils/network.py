@@ -7,7 +7,7 @@ import re
 import subprocess
 from typing import Optional, Tuple
 
-from .platform import is_windows, is_termux, is_wsl, check_command
+from .platform import is_windows, is_termux, is_wsl
 
 
 def mac_valid(mac: str) -> bool:
@@ -112,7 +112,7 @@ def _get_windows_local_mac() -> Optional[str]:
 def _get_termux_adapter_status() -> Tuple[bool, str]:
     """Estado del Bluetooth en Termux."""
     try:
-        from .termux_backend import get_status, is_termux_api_available, is_termux_bluetooth_enabled
+        from .termux_backend import is_termux_api_available, is_termux_bluetooth_enabled
         if is_termux_api_available():
             enabled = is_termux_bluetooth_enabled()
             if enabled:
@@ -170,7 +170,7 @@ def get_adapter_status() -> Tuple[bool, str]:
 def _get_windows_adapter_status() -> Tuple[bool, str]:
     """Estado del Bluetooth en Windows."""
     try:
-        from .windows_backend import get_bluetooth_status, check_bluetooth_on_windows
+        from .windows_backend import get_bluetooth_status
         status = get_bluetooth_status()
         if status.get("available"):
             return True, f"Bluetooth activo ({status.get('adapter_name', 'Adaptador')})"

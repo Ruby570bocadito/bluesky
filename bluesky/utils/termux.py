@@ -4,9 +4,9 @@ Auto-detects Termux environment and adapts commands accordingly.
 """
 
 import os
+import json
 import shutil
 import subprocess
-from typing import Optional, Tuple
 
 
 def is_termux() -> bool:
@@ -43,7 +43,6 @@ def get_termux_bluetooth_devices() -> list:
             ["termux-bluetooth", "scan"],
             capture_output=True, text=True, timeout=15
         )
-        import json
         data = json.loads(result.stdout)
         for dev in data:
             devices.append({
@@ -65,7 +64,6 @@ def get_termux_bonded_devices() -> list:
             ["termux-bluetooth", "bonded"],
             capture_output=True, text=True, timeout=5
         )
-        import json
         data = json.loads(result.stdout)
         for dev in data:
             devices.append({

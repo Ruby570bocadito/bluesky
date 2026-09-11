@@ -4,7 +4,6 @@ Service Scanner - Enumeración de servicios SDP en dispositivos Bluetooth Classi
 
 import subprocess
 import re
-from typing import Optional
 
 from bluesky.core.engine import BaseModule
 

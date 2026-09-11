@@ -29,16 +29,13 @@ Advertencia:
 
 from __future__ import annotations
 
-import os
 import random
 import struct
-import hashlib
-import logging
-import subprocess
-from typing import Dict, Any, List, Optional, Tuple, Set
-from pathlib import Path
-import json
 import time
+import json
+import logging
+from typing import Dict, List, Optional, Tuple, Set
+from pathlib import Path
 
 from bluesky.core.engine import BaseModule
 
@@ -51,8 +48,21 @@ try:
     )
     from scapy.layers.bluetooth4LE import (
         BTLE, BTLE_DATA, BTLE_ADV, BTLE_CTRL,
-        LL_DATA, LL_CONNECTION_UPDATE_REQ,
-        LL_CHANNEL_MAP_REQ, LL_TERMINATE_IND,
+        # Nota: scapy >= 2.5 renombró los LL Control PDUs a *_IND y eliminó
+        # LL_DATA (los datos viajan como BTLE_DATA). Importar los nombres
+        # antiguos dejaba SCAPY_AVAILABLE=False con scapy instalado.
+        LL_CONNECTION_UPDATE_IND,
+        LL_CHANNEL_MAP_IND, LL_TERMINATE_IND,
+        LL_VERSION_IND, LL_FEATURE_REQ, LL_FEATURE_RSP,
+        LL_PAUSE_ENC_REQ, LL_PAUSE_ENC_RSP,
+    )
+    # Sondeo de disponibilidad de las capas BLE de scapy.
+    _SCAPY_PROBE = (
+        HCI_Hdr, HCI_ACL_Hdr, L2CAP_Hdr,
+        SM_Hdr, SM_Pairing_Request, SM_Pairing_Response,
+        BTLE, BTLE_DATA, BTLE_ADV, BTLE_CTRL,
+        LL_CONNECTION_UPDATE_IND,
+        LL_CHANNEL_MAP_IND, LL_TERMINATE_IND,
         LL_VERSION_IND, LL_FEATURE_REQ, LL_FEATURE_RSP,
         LL_PAUSE_ENC_REQ, LL_PAUSE_ENC_RSP,
     )
@@ -138,7 +148,7 @@ class BTLEJack(BaseModule):
         self._channel = (options or {}).get("CHANNEL", "auto")
         self._access_address = (options or {}).get("ACCESS_ADDRESS", "")
         self._payload = (options or {}).get("PAYLOAD", "")
-        self._timeout = int((options or {}).get("TIMEOUT", "30"))
+        self._timeout = self._opt_int("TIMEOUT", 30)
         self._output_dir = (options or {}).get("OUTPUT", "reports/btlejack")
         self._aa = (options or {}).get("AA", "")
 
@@ -317,23 +327,24 @@ class BTLEJack(BaseModule):
         if not SCAPY_AVAILABLE:
             log.warning("scapy no disponible - usando simulación para sniff")
 
-        # Simulación de sniffing
+        # Simulación de sniffing (self._captured_packets guarda los objetos
+        # scapy internos; data["packets"] expone solo hex serializable)
         sim_result = self._simulate_sniff()
         self.result["data"].update(sim_result)
 
         # Guardar captura
-        if sim_result.get("packets"):
+        if self._captured_packets:
             pcap_file = output_dir / "btlejack_capture.pcap"
             try:
                 # Intentar guardar con scapy
                 from scapy.utils import wrpcap
-                wrpcap(str(pcap_file), sim_result["packets"])
+                wrpcap(str(pcap_file), self._captured_packets)
                 self.result["data"]["pcap_file"] = str(pcap_file)
             except Exception:
-                # Fallback a JSON
+                # Fallback a JSON (payloads hex, serializables)
                 json_file = output_dir / "btlejack_capture.json"
                 with open(json_file, "w") as f:
-                    json.dump(sim_result["packets"][:100], f, indent=2)
+                    json.dump(sim_result.get("packets", [])[:100], f, indent=2)
                 self.result["data"]["capture_file"] = str(json_file)
 
         # Generar mensaje
@@ -359,7 +370,8 @@ class BTLEJack(BaseModule):
 
     def _simulate_sniff(self) -> Dict:
         """Simula captura de paquetes BLE."""
-        packets = []
+        packets = []          # payloads hex (serializables para JSON/reportes)
+        raw_packets = []      # objetos scapy para wrpcap
         types = {}
         count = 0
 
@@ -379,10 +391,12 @@ class BTLEJack(BaseModule):
                     from scapy.all import Raw
                     aa = int(self._access_address, 16) if self._access_address else 0x8E89BED6
                     pkt = Raw(struct.pack("<I", aa) + bytes([i]) * 16)
-                    packets.append(pkt)
+                    raw_packets.append(pkt)
+                    packets.append(bytes(pkt).hex())
                 except Exception:
                     pass
 
+        self._captured_packets = raw_packets
         self.result["data"]["packet_types"] = types
         self.result["data"]["packets_captured"] = count
         self.result["data"]["packets"] = packets[:50] if SCAPY_AVAILABLE else []
@@ -458,9 +472,16 @@ class BTLEJack(BaseModule):
 
     def _simulate_hijack(self) -> Dict:
         """Simula el proceso de hijack."""
+        if self._channel != "auto":
+            try:
+                channel = int(self._channel)
+            except (TypeError, ValueError):
+                channel = random.randint(0, 36)
+        else:
+            channel = random.randint(0, 36)
         sim = {
             "success": random.random() > 0.3,  # 70% de tasa de éxito simulada
-            "channel": int(self._channel) if self._channel != "auto" else random.randint(0, 36),
+            "channel": channel,
             "packets_injected": random.randint(3, 15),
             "method": "Connection Update Injection",
             "timing_offset_us": random.randint(50, 300),

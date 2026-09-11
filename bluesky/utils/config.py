@@ -17,7 +17,6 @@ Rutas de búsqueda (por orden de precedencia):
 from __future__ import annotations
 
 import json
-import os
 import copy
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -307,7 +306,11 @@ class BlueskyConfig:
             Valor de la opción o default.
         """
         module_opts = self.get("module_options", {})
-        mod = module_opts.get(module_name, {})
+        if not isinstance(module_opts, dict):
+            return default
+        mod = module_opts.get(module_name)
+        if not isinstance(mod, dict):
+            return default
         return mod.get(key, default)
 
     # ── Escritura ────────────────────────────────────────────────────────────
@@ -337,10 +340,18 @@ class BlueskyConfig:
             value: Valor a asignar
         """
         module_opts = self.get("module_options", {})
-        if module_name not in module_opts:
-            module_opts[module_name] = {}
-        module_opts[module_name][key] = value
-        self._config.setdefault("module_options", {})[module_name] = module_opts[module_name]
+        if not isinstance(module_opts, dict):
+            # module_options malformado (config editada a mano): lo reconstruimos
+            module_opts = {}
+            self._config["module_options"] = module_opts
+        mod = module_opts.get(module_name)
+        if not isinstance(mod, dict):
+            # La entrada del módulo no es un dict (p.ej. "knob": "junk"): la
+            # reemplazamos en vez de reventar con TypeError.
+            mod = {}
+        mod[key] = value
+        module_opts[module_name] = mod
+        self._config["module_options"] = module_opts
         self._dirty = True
 
     def add_favorite(self, address: str, name: str = "", type_: str = "auto") -> None:
@@ -354,8 +365,12 @@ class BlueskyConfig:
         if type_ not in VALID_TYPES:
             type_ = "auto"
         favs = self.get("favorites", [])
-        # Evitar duplicados por address
-        favs = [f for f in favs if f.get("address", "").lower() != address.lower()]
+        if not isinstance(favs, list):
+            favs = []
+        # Evitar duplicados por address (descartando entradas malformadas)
+        favs = [f for f in favs
+                if isinstance(f, dict)
+                and f.get("address", "").lower() != address.lower()]
         favs.append({"address": address, "name": name, "type": type_})
         self._config["favorites"] = favs
         self._dirty = True
@@ -363,7 +378,11 @@ class BlueskyConfig:
     def remove_favorite(self, address: str) -> None:
         """Elimina un target de favoritos por address."""
         favs = self.get("favorites", [])
-        favs = [f for f in favs if f.get("address", "").lower() != address.lower()]
+        if not isinstance(favs, list):
+            favs = []
+        favs = [f for f in favs
+                if isinstance(f, dict)
+                and f.get("address", "").lower() != address.lower()]
         self._config["favorites"] = favs
         self._dirty = True
 

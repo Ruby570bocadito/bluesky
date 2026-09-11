@@ -1,56 +1,32 @@
 {% extends "base.html" %}
-{% block title %}Sesiones - Bluesky{% endblock %}
+{% block title %}Sesiones{% endblock %}
 
 {% block content %}
-<div class="row mb-3">
-    <div class="col">
-        <h2><i class="bi bi-clock-history text-primary"></i> Sesiones</h2>
-        <p class="text-muted">Historial de sesiones de auditoría.</p>
-    </div>
+<div class="page-head">
+  <div>
+    <div class="micro">Persistencia</div>
+    <div class="page-title">Sesiones</div>
+    <div class="page-sub">Auditorías guardadas en ~/.bluesky/sessions</div>
+  </div>
 </div>
 
 <div class="card">
-    <div class="card-body p-0">
-        {% if sessions %}
-        <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-                <thead class="table-dark">
-                    <tr>
-                        <th>ID</th>
-                        <th>Inicio</th>
-                        <th>Targets</th>
-                        <th>Resultados</th>
-                        <th>Estado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for s in sessions %}
-                    <tr>
-                        <td><code>{{ s.id[:16] }}...</code></td>
-                        <td><small>{{ s.created or s.start_time or '—' }}</small></td>
-                        <td>{{ s.targets|length if s.targets else 0 }}</td>
-                        <td>{{ s.results|length if s.results else 0 }}</td>
-                        <td>
-                            {% if s.status == 'active' %}
-                                <span class="badge bg-success">Activa</span>
-                            {% elif s.status == 'completed' %}
-                                <span class="badge bg-secondary">Completada</span>
-                            {% else %}
-                                <span class="badge bg-warning">{{ s.status }}</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <div class="text-center text-muted py-5">
-            <i class="bi bi-clock-history display-3 d-block mb-3"></i>
-            <h5>No hay sesiones</h5>
-            <p>Las sesiones se crean al ejecutar módulos o escaneos.</p>
-        </div>
-        {% endif %}
-    </div>
+  {% if sessions %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Sesión</th><th>Archivo</th></tr></thead>
+      <tbody>
+        {% for s in sessions %}
+        <tr>
+          <td>{{ s }}</td>
+          <td class="mono muted">{{ s }}.json</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><span class="big">🗂️</span>No hay sesiones guardadas.<br>Crea una desde la consola: <code class="mono">session save &lt;nombre&gt;</code></div>
+  {% endif %}
 </div>
 {% endblock %}

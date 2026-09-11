@@ -13,12 +13,11 @@ Características:
   - Sin dependencia de Rich si no está instalado
 """
 
-import os
 import sys
 import logging
 import logging.handlers
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from datetime import datetime
 
 
@@ -56,7 +55,6 @@ def _init_rich():
     if RICH_AVAILABLE:
         return True
     try:
-        from rich.logging import RichHandler  # noqa: F401  # needed for side effects
         from rich.console import Console
         _rich_console = Console(stderr=True)
         RICH_AVAILABLE = True

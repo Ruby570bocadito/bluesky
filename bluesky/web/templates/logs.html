@@ -1,56 +1,34 @@
 {% extends "base.html" %}
-{% block title %}Logs - Bluesky{% endblock %}
+{% block title %}Logs{% endblock %}
 
 {% block content %}
-<div class="row mb-3">
-    <div class="col d-flex justify-content-between align-items-center">
-        <div>
-            <h2><i class="bi bi-terminal text-primary"></i> Logs del Sistema</h2>
-            <p class="text-muted">Registro de actividades del dashboard web.</p>
-        </div>
-        <button class="btn btn-outline-secondary" onclick="refreshLogs()">
-            <i class="bi bi-arrow-clockwise"></i> Actualizar
-        </button>
-    </div>
+<div class="page-head">
+  <div>
+    <div class="micro">Trazas</div>
+    <div class="page-title">Logs del dashboard</div>
+    <div class="page-sub">Últimas {{ web_log | length }} entradas · actualización automática cada 4 s</div>
+  </div>
+  <span class="pill" id="log-pill"><span class="dot live"></span>en vivo</span>
 </div>
 
 <div class="card">
-    <div class="card-body p-0">
-        <div class="log-container p-3" style="max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 0.875rem;">
-            {% for entry in web_log %}
-            <div class="log-entry mb-1">
-                <span class="text-muted">{{ entry.time }}</span>
-                <span class="badge bg-{{ 'success' if entry.level == 'info' else 'danger' if entry.level == 'error' else 'warning' }} ms-1" style="font-size: 0.7rem;">{{ entry.level }}</span>
-                <span class="ms-1">{{ entry.message }}</span>
-            </div>
-            {% else %}
-            <div class="text-muted text-center py-4">
-                <i class="bi bi-inbox"></i> No hay entradas de log
-            </div>
-            {% endfor %}
-        </div>
-    </div>
+  {% if web_log %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:80px">Hora</th><th style="width:70px">Nivel</th><th>Mensaje</th></tr></thead>
+      <tbody id="log-body">
+        {% for e in web_log | reverse %}
+        <tr>
+          <td class="mono faint">{{ e.get('time','') }}</td>
+          <td class="log-level {{ e.get('level','info') }}">{{ e.get('level','info') }}</td>
+          <td>{{ e.get('message','') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Sin entradas registradas.</div>
+  {% endif %}
 </div>
-{% endblock %}
-
-{% block extra_scripts %}
-<script>
-function refreshLogs() {
-    fetch('/api/logs')
-    .then(r => r.json())
-    .then(data => {
-        const container = document.querySelector('.log-container');
-        container.innerHTML = data.entries.map(e =>
-            `<div class="log-entry mb-1">
-                <span class="text-muted">${e.time}</span>
-                <span class="badge bg-${e.level === 'info' ? 'success' : e.level === 'error' ? 'danger' : 'warning'} ms-1" style="font-size: 0.7rem;">${e.level}</span>
-                <span class="ms-1">${e.message}</span>
-            </div>`
-        ).join('');
-    });
-}
-
-// Auto-refresh every 5 seconds
-setInterval(refreshLogs, 5000);
-</script>
 {% endblock %}

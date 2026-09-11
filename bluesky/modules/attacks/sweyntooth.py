@@ -25,7 +25,7 @@ import subprocess
 import shutil
 import re
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Tuple
 
 from bluesky.core.engine import BaseModule
 
@@ -45,6 +45,23 @@ try:
         ATT_Read_Request, ATT_Error_Response, ATT_Exchange_MTU_Request,
         SM_Hdr, SM_Pairing_Request, SM_Pairing_Response,
         BluetoothHCISocket, HCI_Hdr, HCI_Event_Hdr,
+        HCI_Cmd_LE_Set_Scan_Parameters, HCI_Cmd_LE_Set_Scan_Enable,
+        HCI_Cmd_LE_Set_Advertising_Parameters,
+        HCI_Cmd_LE_Set_Advertising_Data,
+        HCI_Cmd_LE_Create_Connection,
+    )
+    # Sondeo de disponibilidad de las capas BLE/ATT de scapy.
+    _SCAPY_PROBE = (
+        BTLE, BTLE_ADV, BTLE_SCAN_REQ, BTLE_SCAN_RSP,
+        BTLE_CONNECT_REQ, BTLE_DATA,
+        LL_FEATURE_RSP, LL_VERSION_IND,
+        LL_ENC_REQ, LL_ENC_RSP, LL_PAUSE_ENC_REQ,
+        LL_PAUSE_ENC_RSP, LL_UNKNOWN_RSP,
+        LL_REJECT_EXT_IND,
+        ATT_Hdr, ATT_Read_By_Group_Type_Request, ATT_Read_By_Type_Request,
+        ATT_Read_Request, ATT_Error_Response, ATT_Exchange_MTU_Request,
+        SM_Hdr, SM_Pairing_Request, SM_Pairing_Response,
+        HCI_Hdr, HCI_Event_Hdr,
         HCI_Cmd_LE_Set_Scan_Parameters, HCI_Cmd_LE_Set_Scan_Enable,
         HCI_Cmd_LE_Set_Advertising_Parameters,
         HCI_Cmd_LE_Set_Advertising_Data,
@@ -167,7 +184,7 @@ class Sweyntooth(BaseModule):
         self._hci_socket = None
         self._hci_device = (options or {}).get("HCI_DEVICE", "hci0")
         self._deep_scan = str((options or {}).get("DEEP_SCAN", "false")).lower() in ("true", "yes", "1")
-        self._scan_duration = int((options or {}).get("SCAN_DURATION", "10"))
+        self._scan_duration = self._opt_int("SCAN_DURATION", 10)
 
     def run(self):
         """Punto de entrada principal."""

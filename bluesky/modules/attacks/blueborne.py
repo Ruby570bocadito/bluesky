@@ -7,11 +7,7 @@ Soporte Windows/Linux/Termux.
 
 import subprocess
 import socket
-import struct
 import sys
-import os
-from typing import Optional
-from pathlib import Path
 
 from bluesky.core.engine import BaseModule
 
@@ -54,7 +50,6 @@ class Blueborne(BaseModule):
     def run(self):
         """Ejecuta el escáner BlueBorne."""
         target = self.target
-        scan_type = self.options.get("scan_type", "probe")  # probe | full
 
         if not target:
             # Sin target, escanear red BT completa
@@ -305,9 +300,9 @@ class Blueborne(BaseModule):
                 sock.connect((bt_addr, 0x1001))  # L2CAP PSM
                 sock.close()
                 return True  # Conexión aceptada - posiblemente vulnerable
-            except:
+            except Exception:
                 return False  # Conexión rechazada - probablemente parcheado
-        except (OSError, Exception):
+        except Exception:
             return False
 
     def _windows_l2cap_test(self, mac: str) -> bool:

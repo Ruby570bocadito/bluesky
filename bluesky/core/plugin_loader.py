@@ -28,12 +28,11 @@ Formato de plugin:
 from __future__ import annotations
 
 import sys
-import os
 import importlib
 import importlib.util
 import inspect
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type, Callable
+from typing import Any, Dict, List, Optional, Type
 from dataclasses import dataclass, field
 
 

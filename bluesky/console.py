@@ -19,7 +19,6 @@ Comandos:
 """
 
 import sys
-import os
 import cmd
 import shlex
 from pathlib import Path
@@ -28,11 +27,6 @@ try:
     from rich.console import Console
     from rich.table import Table
     from rich.panel import Panel
-    from rich.syntax import Syntax
-    from rich.markdown import Markdown
-    from rich import print as rprint
-    from rich.prompt import Prompt
-    from rich.layout import Layout
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
@@ -41,7 +35,7 @@ from bluesky.core.engine import ModuleEngine
 from bluesky.core.session import Session
 from bluesky.core.hardware import HardwareDetector
 from bluesky.core.reporter import Reporter
-from bluesky.utils.format import colorize, separator, severity_icon, target_type_icon
+from bluesky.utils.format import colorize, severity_icon, target_type_icon
 from bluesky.utils.config import get_config, parse_key_value
 
 
@@ -49,7 +43,6 @@ class BlueskyConsole(cmd.Cmd):
     """Consola interactiva bluesky estilo Metasploit."""
 
     intro = ""
-    prompt = "bluesky > "
 
     def __init__(self):
         super().__init__()
@@ -127,7 +120,7 @@ class BlueskyConsole(cmd.Cmd):
         cls = self.engine.get_module(arg)
         if not cls:
             print(f"  {colorize('✘', 'red')} Módulo '{arg}' no encontrado")
-            print(f"  Usa 'list' para ver módulos disponibles")
+            print("  Usa 'list' para ver módulos disponibles")
             return
 
         self.current_module = arg
@@ -197,7 +190,7 @@ class BlueskyConsole(cmd.Cmd):
         """run [target] - Ejecutar el módulo seleccionado"""
         if not self.current_module:
             print(f"  {colorize('✘', 'red')} No hay módulo seleccionado")
-            print(f"  Usa 'use <módulo>' primero")
+            print("  Usa 'use <módulo>' primero")
             return
 
         target = arg or self.module_target
@@ -409,7 +402,7 @@ class BlueskyConsole(cmd.Cmd):
         target = arg or self.module_target
         if not target:
             print(f"  {colorize('⚠️', 'yellow')} Sin target. Usa 'set TARGET <MAC>' o pasa target al comando")
-            print(f"  check <MAC>")
+            print("  check <MAC>")
             return
 
         cls = self.engine.get_module(self.current_module)
@@ -478,6 +471,53 @@ class BlueskyConsole(cmd.Cmd):
             print(f"  Severidad: {severity_icon(info.get('severity',''))} {info.get('severity','').title()}")
             print(f"  CVE: {info.get('cve','N/A')}")
             print(f"  Target: {info.get('target_type','').upper()}")
+
+    def do_educate(self, arg):
+        """educate [ódulo] - Explicación educativa paso a paso (qué es, cómo funciona, mitigación)"""
+        from bluesky.core.education import (
+            get_education, covered_modules, format_education_plain,
+            format_education_rich,
+        )
+
+        target_mod = arg.strip().lower() or self.current_module
+        if not target_mod:
+            # Índice de contenidos disponibles
+            mods = covered_modules()
+            if self.console:
+                table = Table(title="Modo educativo — módulos disponibles", border_style="cyan")
+                table.add_column("Módulo", style="cyan", width=16)
+                table.add_column("Tema", style="dim")
+                from bluesky.core.education import EDU_DB
+                for m in mods:
+                    table.add_row(m, EDU_DB[m]["title"])
+                self.console.print(table)
+            else:
+                print("  Modo educativo — usa: educate <módulo>")
+                for m in mods:
+                    print(f"    - {m}")
+            print("  Uso: educate <módulo>")
+            return
+
+        entry = get_education(target_mod)
+        if entry is None:
+            print(f"  {colorize('✘', 'red')} Sin contenido educativo para '{target_mod}'")
+            print(f"  Disponibles: {', '.join(covered_modules())}")
+            return
+
+        if self.console:
+            format_education_rich(entry, self.console)
+        else:
+            print(format_education_plain(entry))
+
+    def complete_educate(self, text, line, begidx, endidx):
+        """Tab-completion para educate con los módulos cubiertos."""
+        from bluesky.core.education import covered_modules
+        args = shlex.split(line) if line else []
+        if len(args) > 1 and not line.endswith(" "):
+            current = args[-1]
+        else:
+            current = ""
+        return [m for m in covered_modules() if m.startswith(current)]
 
     def do_show(self, arg):
         """show [modules|options|targets|advanced] - Mostrar información"""
@@ -560,15 +600,15 @@ class BlueskyConsole(cmd.Cmd):
                 content += f"[bold]CVE:[/] [red]{cve}[/]\n"
                 if cve_url:
                     content += f"[bold]CVE URL:[/] [blue]{cve_url}[/]\n"
-            content += f"\n"
+            content += "\n"
 
             if exploits:
-                content += f"[bold]Exploit Links:[/]\n"
+                content += "[bold]Exploit Links:[/]\n"
                 for e in exploits:
                     content += f"  • [blue]{e}[/]\n"
 
             if refs:
-                content += f"\n[bold]References:[/]\n"
+                content += "\n[bold]References:[/]\n"
                 for r in refs:
                     content += f"  • [blue]{r}[/]\n"
 
@@ -581,11 +621,11 @@ class BlueskyConsole(cmd.Cmd):
                 if cve_url:
                     print(f"  CVE URL: {cve_url}")
             if exploits:
-                print(f"  Exploits:")
+                print("  Exploits:")
                 for e in exploits:
                     print(f"    • {e}")
             if refs:
-                print(f"  References:")
+                print("  References:")
                 for r in refs:
                     print(f"    • {r}")
         print()
@@ -602,7 +642,7 @@ class BlueskyConsole(cmd.Cmd):
         print(f"  {colorize('🔍', 'cyan')} Escaneando vulnerabilidades de {target}...")
 
         if self.console:
-            with self.console.status("[bold cyan]Scanning vulnerabilities...") as status:
+            with self.console.status("[bold cyan]Scanning vulnerabilities..."):
                 result = self.engine.run_module("vuln", target=target)
         else:
             result = self.engine.run_module("vuln", target=target)
@@ -639,7 +679,7 @@ class BlueskyConsole(cmd.Cmd):
         print(f"  {colorize('⚡', 'cyan')} Autopilot mode={mode} target={target or 'all'}")
 
         if self.console:
-            with self.console.status("[bold cyan]Running Autopilot...") as status:
+            with self.console.status("[bold cyan]Running Autopilot..."):
                 result = self.engine.run_module(
                     "autopilot",
                     target=target,
@@ -666,7 +706,7 @@ class BlueskyConsole(cmd.Cmd):
             scan_type = "classic"
 
         if self.console:
-            with self.console.status(f"[bold cyan]Scanning {scan_type.upper()} devices...") as status:
+            with self.console.status(f"[bold cyan]Scanning {scan_type.upper()} devices..."):
                 scanner = DeviceScanner(options={"type": scan_type, "timeout": str(timeout)})
                 result = scanner.run()
         else:
@@ -720,7 +760,7 @@ class BlueskyConsole(cmd.Cmd):
                         table.add_row(s)
                     self.console.print(table)
                 else:
-                    print(f"\n  Sesiones:")
+                    print("\n  Sesiones:")
                     for s in sessions:
                         print(f"    📁 {s}")
 
@@ -796,24 +836,6 @@ class BlueskyConsole(cmd.Cmd):
         if not args or args[0] == "show":
             if self.console:
                 all_cfg = self.config.get_all()
-                content = f"[bold]Config file:[/] [dim]{self.config._path or '(defaults)'}[/]\n"
-                content += f"[bold]Dirty:[/] {'[yellow]Yes[/]' if self.config.is_dirty() else '[green]No[/]'}\n\n"
-
-                def _add_section(data, indent=0):
-                    prefix = "  " * indent
-                    for key, value in data.items():
-                        if isinstance(value, dict):
-                            content_part = f"{prefix}[bold]{key}[/]:\n"
-                            # Can't modify content from nested function easily, just print
-                        elif isinstance(value, list):
-                            if value:
-                                content += f"{prefix}{key}: {len(value)} items\n"
-                            else:
-                                content += f"{prefix}{key}: []\n"
-                        else:
-                            content += f"{prefix}{key}: [cyan]{value}[/]\n"
-
-                # Rebuild with proper approach
                 content = f"[bold]Config file:[/] [dim]{self.config._path or '(defaults)'}[/]\n"
                 content += f"[bold]Dirty:[/] {'[yellow]Yes[/]' if self.config.is_dirty() else '[green]No[/]'}\n\n"
 
@@ -900,6 +922,9 @@ class BlueskyConsole(cmd.Cmd):
               [cyan]config save[/]           Persistir cambios a disco
               [cyan]config reset[/]          Restaurar valores por defecto
 
+            [bold]Aprendizaje[/]
+              [cyan]educate [módulo][/]     Explicación paso a paso: qué es, cómo funciona y cómo MITIGAR cada ataque
+
             [bold]Generales[/]
               [cyan]help[/]                 Mostrar esta ayuda
               [cyan]exit / quit[/]          Salir de la consola
@@ -932,7 +957,7 @@ class BlueskyConsole(cmd.Cmd):
     def default(self, line):
         """Comando no reconocido"""
         print(f"  {colorize('✘', 'red')} Comando desconocido: '{line}'")
-        print(f"  Escribe 'help' para ayuda")
+        print("  Escribe 'help' para ayuda")
 
 
 def start_console():

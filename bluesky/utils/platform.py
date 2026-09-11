@@ -5,11 +5,9 @@ puedan adaptar su comportamiento según la plataforma.
 """
 
 import os
-import sys
 import platform
 import shutil
-import subprocess
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
 
 
 def get_platform() -> str:
@@ -55,7 +53,8 @@ def is_wsl() -> bool:
         return False
     try:
         with open("/proc/version", "r") as f:
-            return "microsoft" in f.read().lower() or "wsl" in f.read().lower()
+            content = f.read().lower()
+        return "microsoft" in content or "wsl" in content
     except Exception:
         return False
 
@@ -89,7 +88,7 @@ def check_bleak() -> bool:
     """Verifica si la librería bleak (BLE cross-platform) está disponible."""
     try:
         import bleak
-        return True
+        return bool(bleak)  # referencia para evitar warning de import de sondeo
     except ImportError:
         return False
 
@@ -98,7 +97,7 @@ def check_pybluez() -> bool:
     """Verifica si PyBluez (Bluetooth Classic) está disponible."""
     try:
         import bluetooth
-        return True
+        return bool(bluetooth)  # referencia para evitar warning de import de sondeo
     except ImportError:
         return False
 

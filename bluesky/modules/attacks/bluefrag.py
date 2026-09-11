@@ -34,16 +34,11 @@ Requiere:
 
 from __future__ import annotations
 
-import os
-import struct
-import hashlib
 import logging
-import binascii
 import random
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from pathlib import Path
 import json
-import time
 
 from bluesky.core.engine import BaseModule
 
@@ -52,6 +47,8 @@ log = logging.getLogger("bluesky.bluefrag")
 try:
     from scapy.layers.bluetooth4LE import BTLE, BTLE_ADV, BTLE_DATA
     from scapy.layers.bluetooth import HCI_Hdr, HCI_ACL_Hdr
+    # Sondeo de disponibilidad de las capas BLE de scapy.
+    _SCAPY_PROBE = (BTLE, BTLE_ADV, BTLE_DATA, HCI_Hdr, HCI_ACL_Hdr)
     SCAPY_AVAILABLE = True
 except ImportError:
     SCAPY_AVAILABLE = False
@@ -231,9 +228,9 @@ class BlueFrag(BaseModule):
         super().__init__(target, options)
         self._mode = (options or {}).get("MODE", "scan").lower()
         self._payload = (options or {}).get("PAYLOAD", "")
-        self._packet_count = int((options or {}).get("PACKET_COUNT", "100"))
-        self._channel = int((options or {}).get("CHANNEL", "38"))
-        self._timeout = int((options or {}).get("TIMEOUT", "30"))
+        self._packet_count = self._opt_int("PACKET_COUNT", 100)
+        self._channel = self._opt_int("CHANNEL", 38)
+        self._timeout = self._opt_int("TIMEOUT", 30)
         self._output_dir = (options or {}).get("OUTPUT", "reports/bluefrag")
         self._interface = (options or {}).get("INTERFACE", "hci0")
 
@@ -485,7 +482,6 @@ class BlueFrag(BaseModule):
         # Si no hay dispositivos simulados para el target, crear uno
         if not devices and self.target:
             addr = self.target.replace("-", ":")
-            prefix = addr[:8] if len(addr) >= 8 else "00:0A:AD"
             is_android = any(
                 addr.upper().startswith(p)
                 for p in self.ANDROID_MAC_PREFIXES
@@ -591,11 +587,11 @@ class BlueFrag(BaseModule):
             "",
             "  ⚠️  Exploit simulado (sin hardware BLE)",
             "  Para exploit real:",
-            f"  1. sudo python3 bluesky attack bluefrog "
+            f"  1. sudo python3 bluesky attack bluefrag "
             f"TARGET={self.target} MODE=exploit PAYLOAD='{payload}'",
             "  2. Asegúrate de estar a <10m del objetivo",
             "  3. El BT del objetivo debe estar encendido",
-            f"  4. Puede requerir sudo para acceso a HCI socket",
+            "  4. Puede requerir sudo para acceso a HCI socket",
             "",
             f"  Payload guardado en: {payload_file}",
         ])
@@ -743,9 +739,6 @@ class BlueFrag(BaseModule):
 
         log.warning(f"💥 BlueFrag - Modo DoS contra {self.target or 'broadcast'}")
 
-        # Construir paquetes DoS (variante sin payload)
-        dos_payload = self._build_dos_payload()
-
         # Simular envío
         sent = min(self._packet_count, 200)
         success = random.random() < 0.6  # 60% en simulación
@@ -763,7 +756,7 @@ class BlueFrag(BaseModule):
             f"  {'⚠️  No se detectó caída del servicio.' if not success else ''}\n\n"
             f"  ⚠️  DoS simulado (sin hardware BLE)\n\n"
             f"  Para DoS real:\n"
-            f"  1. sudo python3 bluesky attack bluefrog "
+            f"  1. sudo python3 bluesky attack bluefrag "
             f"TARGET={self.target} MODE=dos\n"
             f"  2. El dispositivo objetivo debe tener BT encendido\n"
             f"  3. El servicio blued se reiniciará automáticamente\n"

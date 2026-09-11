@@ -1,140 +1,101 @@
 {% extends "base.html" %}
-{% block title %}{{ name }} - Bluesky{% endblock %}
+{% block title %}{{ info.get('name', name) }}{% endblock %}
 
 {% block content %}
-<div class="row mb-3">
-    <div class="col">
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('modules_page') }}">Módulos</a></li>
-                <li class="breadcrumb-item active">{{ name }}</li>
-            </ol>
-        </nav>
-    </div>
+<div class="page-head">
+  <div>
+    <div class="micro">Módulo</div>
+    <div class="page-title">{{ info.get('name', name) }}</div>
+    <div class="page-sub">{{ info.get('description', '') }}</div>
+  </div>
+  <a href="/modules" class="btn ghost">← Volver</a>
 </div>
 
-<div class="row g-3">
-    <!-- Info Panel -->
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-info-circle"></i> Información
-            </div>
-            <div class="card-body">
-                <table class="table table-sm">
-                    <tr><td class="text-muted">Nombre:</td><td><code>{{ info.name }}</code></td></tr>
-                    <tr><td class="text-muted">Versión:</td><td>{{ info.version }}</td></tr>
-                    <tr><td class="text-muted">Autor:</td><td>{{ info.author }}</td></tr>
-                    <tr><td class="text-muted">Severidad:</td>
-                        <td><span class="badge bg-{{ 'danger' if info.severity == 'critical' else 'warning' if info.severity == 'high' else 'info' if info.severity == 'medium' else 'secondary' }}">{{ info.severity }}</span></td>
-                    </tr>
-                    <tr><td class="text-muted">Target:</td>
-                        <td><span class="badge bg-{{ 'info' if info.target_type == 'ble' else 'primary' if info.target_type == 'classic' else 'warning' if info.target_type == 'android' else 'success' }}">{{ info.target_type }}</span></td>
-                    </tr>
-                    <tr><td class="text-muted">Requiere root:</td>
-                        <td>{% if info.requires_root %}<span class="badge bg-warning">Sí</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
-                    </tr>
-                    <tr><td class="text-muted">Hardware:</td>
-                        <td>
-                            {% if info.requires_hardware %}
-                                {% for hw in info.requires_hardware %}
-                                    <span class="badge bg-dark me-1">{{ hw }}</span>
-                                {% endfor %}
-                            {% else %}
-                                <span class="text-muted">Ninguno específico</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-
-        <!-- CVE Info -->
-        {% if info.cve %}
-        <div class="card mt-3">
-            <div class="card-header">
-                <i class="bi bi-shield-exclamation text-danger"></i> CVE / Vulnerabilidad
-            </div>
-            <div class="card-body">
-                <p><strong>{{ info.cve }}</strong></p>
-                {% if info.cve_url %}
-                <a href="{{ info.cve_url }}" target="_blank" class="btn btn-sm btn-outline-danger">
-                    <i class="bi bi-box-arrow-up-right"></i> Ver CVE
-                </a>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Información</div>
+    <div class="kv">
+      <span class="k">Versión</span><span class="v mono">{{ info.get('version', '—') }}</span>
+      <span class="k">Autor</span><span class="v">{{ info.get('author', '—') }}</span>
+      <span class="k">Severidad</span>
+      <span class="v"><span class="sev {{ info.get('severity','low') }}">{{ info.get('severity','—') }}</span></span>
+      <span class="k">Objetivo</span>
+      <span class="v"><span class="badge">{{ info.get('target_type','—') }}</span></span>
+      <span class="k">Requiere root</span><span class="v">{{ 'Sí' if info.get('requires_root') else 'No' }}</span>
+      <span class="k">Hardware</span>
+      <span class="v">{{ info.get('requires_hardware', []) | join(', ') if info.get('requires_hardware') else 'Ninguno (BT integrado)' }}</span>
     </div>
+  </div>
 
-    <!-- Description & Details -->
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-card-text"></i> Descripción
-            </div>
-            <div class="card-body">
-                <p>{{ info.description }}</p>
-            </div>
-        </div>
-
-        <!-- Module Options -->
-        <div class="card mt-3">
-            <div class="card-header">
-                <i class="bi bi-gear"></i> Opciones del Módulo
-            </div>
-            <div class="card-body p-0">
-                <table class="table table-sm mb-0">
-                    <thead class="table-dark">
-                        <tr><th>Opción</th><th>Descripción</th></tr>
-                    </thead>
-                    <tbody>
-                        {% for opt, desc in info.module_options.items() %}
-                        <tr>
-                            <td><code>{{ opt }}</code></td>
-                            <td><small>{{ desc }}</small></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Exploit Links -->
-        {% if info.exploit_links %}
-        <div class="card mt-3">
-            <div class="card-header">
-                <i class="bi bi-link-45deg"></i> Enlaces y Exploits
-            </div>
-            <div class="card-body">
-                <ul class="list-unstyled mb-0">
-                    {% for link in info.exploit_links %}
-                    <li class="mb-1">
-                        <a href="{{ link }}" target="_blank" class="text-break">
-                            <i class="bi bi-box-arrow-up-right"></i> {{ link }}
-                        </a>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- References -->
-        {% if info.references %}
-        <div class="card mt-3">
-            <div class="card-header">
-                <i class="bi bi-book"></i> Referencias
-            </div>
-            <div class="card-body">
-                <ul class="mb-0">
-                    {% for ref in info.references %}
-                    <li><small>{{ ref }}</small></li>
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
-        {% endif %}
+  <div class="card">
+    <div class="card-title">Ejecución</div>
+    {% if info.get('cve') %}
+    <div class="kv" style="margin-bottom:14px">
+      <span class="k">CVE</span><span class="v mono">{{ info.get('cve') }}</span>
+      {% if info.get('cve_url') %}<span class="k">Referencia</span><span class="v"><a class="textlink" href="{{ info.get('cve_url') }}" rel="noopener noreferrer">{{ info.get('cve_url') }}</a></span>{% endif %}
     </div>
+    {% endif %}
+    <div class="micro" style="margin-bottom:8px">Opciones</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Opción</th><th>Descripción</th></tr></thead>
+        <tbody>
+          {% for k, d in info.get('module_options', {}).items() %}
+          <tr><td class="mono">{{ k }}</td><td class="muted">{{ d }}</td></tr>
+          {% else %}
+          <tr><td colspan="2" class="muted">Sin opciones adicionales.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if info.get('references') %}
+    <div class="micro" style="margin:14px 0 6px">Referencias</div>
+    <div class="chips">
+      {% for r in info.get('references', []) %}
+      <span class="badge">{{ r }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
 </div>
+
+{% if education %}
+<div class="card" style="margin-top:16px">
+  <div class="card-title">
+    Modo educativo — {{ education.get('title', '') }}
+    <span class="badge accent">paso a paso</span>
+  </div>
+
+  <div class="micro" style="margin-bottom:6px">Qué es</div>
+  <p class="muted" style="margin-bottom:16px">{{ education.get('what', '') }}</p>
+
+  <div class="micro" style="margin-bottom:6px">Cómo funciona</div>
+  <div style="margin-bottom:16px">
+    {% for step in education.get('how', []) %}
+    <div class="edu-step">
+      <span class="n">{{ loop.index }}</span>
+      <span class="t">{{ step.split('. ', 1)[1] if step[:2].rstrip('.').isdigit() and '. ' in step else step }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="micro" style="margin-bottom:6px">Impacto</div>
+  <p class="muted" style="margin-bottom:16px">{{ education.get('impact', '') }}</p>
+
+  <div class="micro" style="margin-bottom:6px">Mitigación — cómo defenderse</div>
+  {% for m in education.get('mitigation', []) %}
+  <div class="edu-mit"><span class="tick">✓</span><span class="t">{{ m }}</span></div>
+  {% endfor %}
+
+  {% if education.get('references') %}
+  <hr class="sep">
+  <div class="micro" style="margin-bottom:6px">Referencias</div>
+  <div class="chips">
+    {% for r in education.get('references', []) %}
+    <span class="badge">{{ r }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

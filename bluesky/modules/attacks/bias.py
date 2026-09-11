@@ -5,7 +5,6 @@ El módulo de detección funciona con hardware básico.
 """
 
 import subprocess
-from typing import Optional
 
 from bluesky.core.engine import BaseModule
 

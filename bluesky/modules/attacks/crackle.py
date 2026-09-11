@@ -25,11 +25,10 @@ Referencia:
 
 from __future__ import annotations
 
-import os
 import struct
 import hashlib
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from pathlib import Path
 
 from bluesky.core.engine import BaseModule
@@ -38,7 +37,7 @@ log = logging.getLogger("bluesky.crackle")
 
 try:
     from scapy.layers.bluetooth import (
-        HCI_Hdr, HCI_ACL_Hdr, L2CAP_Hdr,
+        HCI_Hdr, L2CAP_Hdr,
         SM_Hdr, SM_Pairing_Request, SM_Pairing_Response,
         SM_Encryption_Information, SM_Master_Identification,
         SM_Identity_Information, SM_Identity_Address_Information,
@@ -47,13 +46,19 @@ try:
     )
     from scapy.layers.bluetooth4LE import BTLE, BTLE_DATA
     from scapy.utils import rdpcap, wrpcap
+    # Sondeo de disponibilidad de las capas SM/HCI de scapy.
+    _SCAPY_PROBE = (
+        HCI_Hdr, L2CAP_Hdr, SM_Identity_Information, SM_Identity_Address_Information,
+        SM_Public_Key, SM_DHKey_Check, SM_Failed, BTLE_DATA, wrpcap,
+    )
     SCAPY_AVAILABLE = True
 except ImportError:
     SCAPY_AVAILABLE = False
 
 try:
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    from cryptography.hazmat.primitives import constant_time
+    from cryptography.hazmat.primitives import ciphers
+    # Sondeo de disponibilidad de cryptography (AES-CMAC para bruteforce).
+    _CRYPTO_PROBE = ciphers
     CRYPTO_AVAILABLE = True
 except ImportError:
     CRYPTO_AVAILABLE = False
@@ -110,7 +115,7 @@ class Crackle(BaseModule):
         self._pcap_file = (options or {}).get("PCAP_FILE", "")
         self._pin = (options or {}).get("PIN", "")
         self._bruteforce = str((options or {}).get("BRUTEFORCE", "true")).lower() in ("true", "yes", "1")
-        self._max_pin = int((options or {}).get("MAX_PIN", "999999"))
+        self._max_pin = self._opt_int("MAX_PIN", 999999)
         self._output_dir = (options or {}).get("OUTPUT", "reports/crackle")
         self._captured_packets: List[bytes] = []
         self._sm_packets: List[Dict] = []
@@ -189,8 +194,6 @@ class Crackle(BaseModule):
 
         # Intentar captura con hcitool + scapy
         try:
-            from scapy.all import sniff
-
             log.info("Iniciando captura BLE SM...")
 
             # Filtro: solo paquetes BLE con L2CAP (SM)
@@ -494,7 +497,6 @@ class Crackle(BaseModule):
         sconfirm = None
         srand = None
         pairing_req = None
-        pairing_resp = None
 
         for pkt in sm_packets:
             if pkt.get("type") == "confirm" and mconfirm is None:
@@ -507,8 +509,6 @@ class Crackle(BaseModule):
                 srand = pkt.get("value")
             elif pkt.get("type") == "pairing_request":
                 pairing_req = pkt
-            elif pkt.get("type") == "pairing_response":
-                pairing_resp = pkt
 
         if not all([mconfirm, mrand, sconfirm, srand]):
             result["message"] = (
@@ -537,7 +537,12 @@ class Crackle(BaseModule):
             result["message"] = "Just Works detectado - TK=0, LTK calculada instantáneamente"
         elif self._pin:
             # PIN conocido: verificar
-            pin = int(self._pin)
+            try:
+                pin = int(self._pin)
+            except (TypeError, ValueError):
+                result["message"] = f"PIN inválido (no numérico): {self._pin!r}"
+                result["time"] = time.time() - start
+                return result
             ltk = self._compute_ltk_from_tk(pin, mrand, srand)
             result["tk"] = pin
             result["ltk"] = ltk

@@ -4,8 +4,6 @@ Funciona sin hardware adicional, solo Bluetooth interno.
 """
 
 import subprocess
-import time
-from typing import Optional
 
 from bluesky.core.engine import BaseModule
 
@@ -27,7 +25,6 @@ class Bluejacking(BaseModule):
         """Ejecuta el ataque Bluejacking."""
         target = self.target
         message = self.options.get("message", "👽 Bluejacked by bluesky!")
-        message_type = self.options.get("type", "vcard")  # vcard | note
 
         if not target:
             # Sin target específico, buscar y mostrar dispositivos
@@ -78,21 +75,18 @@ class Bluejacking(BaseModule):
                 f.write(content)
                 temp_path = f.name
 
-            # Usar obexctl para enviar
-            proc = subprocess.run(
-                ["obexctl"],
-                capture_output=True, text=True, timeout=3
-            )
-
-            # obexctl es interactivo, intentar con send
-            result = subprocess.run(
-                ["bluetooth-sendto", "--device", target, temp_path],
-                capture_output=True, text=True, timeout=10
-            )
-
-            import os
-            os.unlink(temp_path)
-            return result.returncode == 0
+            # obexctl es interactivo, no es útil en modo no interactivo; el
+            # envío real lo hace bluetooth-sendto
+            try:
+                result = subprocess.run(
+                    ["bluetooth-sendto", "--device", target, temp_path],
+                    capture_output=True, text=True, timeout=10
+                )
+                sent = result.returncode == 0
+            finally:
+                import os
+                os.unlink(temp_path)
+            return sent
 
         except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
             return False
@@ -106,12 +100,15 @@ class Bluejacking(BaseModule):
                 f.write(content)
                 temp_path = f.name
 
-            result = subprocess.run(
-                ["ussp-push", target, temp_path, "bluesky.vcf"],
-                capture_output=True, text=True, timeout=10
-            )
-            os.unlink(temp_path)
-            return result.returncode == 0
+            try:
+                result = subprocess.run(
+                    ["ussp-push", target, temp_path, "bluesky.vcf"],
+                    capture_output=True, text=True, timeout=10
+                )
+                sent = result.returncode == 0
+            finally:
+                os.unlink(temp_path)
+            return sent
         except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
             return False
 
@@ -124,12 +121,15 @@ class Bluejacking(BaseModule):
                 f.write(content)
                 temp_path = f.name
 
-            result = subprocess.run(
-                ["bluetooth-sendto", target, temp_path],
-                capture_output=True, text=True, timeout=10
-            )
-            os.unlink(temp_path)
-            return result.returncode == 0
+            try:
+                result = subprocess.run(
+                    ["bluetooth-sendto", target, temp_path],
+                    capture_output=True, text=True, timeout=10
+                )
+                sent = result.returncode == 0
+            finally:
+                os.unlink(temp_path)
+            return sent
         except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
             return False
 

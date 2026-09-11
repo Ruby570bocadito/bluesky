@@ -6,8 +6,6 @@ Main entry point for the command-line interface.
 
 import sys
 import json
-import os
-from pathlib import Path
 
 from bluesky import __version__, __description__
 from bluesky.console import start_console
@@ -39,7 +37,7 @@ def print_banner():
 def print_help():
     """Muestra la ayuda principal."""
     print(f"\n{colorize('USO:', 'bold')}")
-    print(f"  bluesky [COMANDO] [ARGS] [OPCIONES]")
+    print("  bluesky [COMANDO] [ARGS] [OPCIONES]")
     print()
     print(f"{colorize('COMANDOS PRINCIPALES:', 'bold')}")
     print(f"  {colorize('scan', 'cyan'):20} Escanear dispositivos Bluetooth cercanos")
@@ -58,6 +56,7 @@ def print_help():
     print(f"  {colorize('auto [target]', 'cyan'):20} Autopilot: scan → vuln → attack → report")
     print(f"  {colorize('spam <target>', 'cyan'):20} BTSpam: inundar dispositivo Bluetooth")
     print(f"  {colorize('web', 'cyan'):20} Iniciar dashboard web (Flask)")
+    print(f"  {colorize('educate [módulo]', 'cyan'):20} Modo educativo: qué es, cómo funciona y cómo mitigar")
     print()
     print(f"  {colorize('OPCIONES GLOBALES:', 'bold')}")
     print(f"  {colorize('--config <archivo>', 'cyan'):20} Usar archivo de configuración personalizado")
@@ -74,17 +73,17 @@ def print_help():
         print(f"  {sev_icon} {colorize(name, 'green'):15} {ttype_icon} {desc}")
     print()
     print(f"{colorize('EJEMPLOS:', 'bold')}")
-    print(f"  bluesky scan")
-    print(f"  bluesky attack bluejacking XX:XX:XX:XX:XX:XX")
-    print(f"  bluesky attack blueborne")
-    print(f"  bluesky info knob")
-    print(f"  bluesky services XX:XX:XX:XX:XX:XX")
-    print(f"  bluesky report --html report.html")
-    print(f"  bluesky vuln AA:BB:CC:DD:EE:FF")
-    print(f"  bluesky auto AA:BB:CC:DD:EE:FF")
-    print(f"  bluesky auto --mode detect")
-    print(f"  bluesky spam AA:BB:CC:DD:EE:FF")
-    print(f"  bluesky spam --method obex_spam --rate 20 --message 'Hola!' AA:BB:CC:DD:EE:FF")
+    print("  bluesky scan")
+    print("  bluesky attack bluejacking XX:XX:XX:XX:XX:XX")
+    print("  bluesky attack blueborne")
+    print("  bluesky info knob")
+    print("  bluesky services XX:XX:XX:XX:XX:XX")
+    print("  bluesky report --html report.html")
+    print("  bluesky vuln AA:BB:CC:DD:EE:FF")
+    print("  bluesky auto AA:BB:CC:DD:EE:FF")
+    print("  bluesky auto --mode detect")
+    print("  bluesky spam AA:BB:CC:DD:EE:FF")
+    print("  bluesky spam --method obex_spam --rate 20 --message 'Hola!' AA:BB:CC:DD:EE:FF")
     print()
 
 
@@ -174,14 +173,14 @@ def cmd_status():
             print(f"    {iface}: {name} ({mac}) [{platform}]")
     else:
         print(f"\n  {colorize('⚠️  No se detectaron adaptadores Bluetooth', 'yellow')}")
-        print(f"    Asegúrate de que Bluetooth esté encendido:")
+        print("    Asegúrate de que Bluetooth esté encendido:")
         if caps.get('is_windows'):
-            print(f"    Windows: Activa Bluetooth desde Configuración → Bluetooth y dispositivos")
-            print(f"    O usa: Settings > Bluetooth & devices > Turn Bluetooth on")
+            print("    Windows: Activa Bluetooth desde Configuración → Bluetooth y dispositivos")
+            print("    O usa: Settings > Bluetooth & devices > Turn Bluetooth on")
         elif caps.get('is_termux'):
-            print(f"    Termux: termux-bluetooth-enable")
+            print("    Termux: termux-bluetooth-enable")
         else:
-            print(f"    Linux:  sudo hciconfig hci0 up  o  systemctl start bluetooth")
+            print("    Linux:  sudo hciconfig hci0 up  o  systemctl start bluetooth")
 
     print()
 
@@ -240,7 +239,7 @@ def cmd_attack(args: list):
     """Ejecuta un ataque."""
     if len(args) < 1:
         print(f"\n  {colorize('✘ Error:', 'red')} Se requiere un módulo de ataque")
-        print(f"  Uso: bluesky attack <módulo> [target] [--options '...']\n")
+        print("  Uso: bluesky attack <módulo> [target] [--options '...']\n")
         return
 
     module_name = args[0]
@@ -339,7 +338,7 @@ def cmd_services(args: list):
     """Enumera servicios SDP de un dispositivo."""
     if not args:
         print(f"\n  {colorize('✘ Error:', 'red')} Se requiere una dirección MAC")
-        print(f"  Uso: bluesky services <MAC>\n")
+        print("  Uso: bluesky services <MAC>\n")
         return
 
     target = args[0]
@@ -359,7 +358,6 @@ def cmd_services(args: list):
             name = svc.get("name", "Unknown")
             channel = svc.get("channel", "")
             risk = svc.get("risk", "low")
-            svc_type = svc.get("type", "other")
 
             risk_icon = severity_icon(risk)
             channel_str = f" (Canal {channel})" if channel else ""
@@ -469,10 +467,10 @@ def cmd_session(args: list):
     """Gestiona sesiones de auditoría."""
     if not args:
         print(f"\n  {colorize('USO:', 'bold')}")
-        print(f"    bluesky session save <nombre>   Guardar sesión actual")
-        print(f"    bluesky session load <nombre>   Cargar sesión")
-        print(f"    bluesky session list            Listar sesiones")
-        print(f"    bluesky session summary         Resumen de sesión actual\n")
+        print("    bluesky session save <nombre>   Guardar sesión actual")
+        print("    bluesky session load <nombre>   Cargar sesión")
+        print("    bluesky session list            Listar sesiones")
+        print("    bluesky session summary         Resumen de sesión actual\n")
         return
 
     action = args[0]
@@ -591,16 +589,16 @@ def cmd_config(args: list):
             print(f"\n  {colorize('✅ Favorito eliminado:', 'green')} {args[2]}\n")
         else:
             print(f"\n  {colorize('Uso:', 'bold')}")
-            print(f"    bluesky config favorite add <MAC> [nombre] [tipo]")
-            print(f"    bluesky config favorite remove <MAC>\n")
+            print("    bluesky config favorite add <MAC> [nombre] [tipo]")
+            print("    bluesky config favorite remove <MAC>\n")
 
     else:
         print(f"\n  {colorize('Uso:', 'bold')}")
-        print(f"    bluesky config               Ver configuración")
-        print(f"    bluesky config set <kv>      Cambiar valor (ej: general.timeout=60)")
-        print(f"    bluesky config save          Persistir cambios")
-        print(f"    bluesky config reset         Valores por defecto")
-        print(f"    bluesky config favorite ...  Gestionar favoritos\n")
+        print("    bluesky config               Ver configuración")
+        print("    bluesky config set <kv>      Cambiar valor (ej: general.timeout=60)")
+        print("    bluesky config save          Persistir cambios")
+        print("    bluesky config reset         Valores por defecto")
+        print("    bluesky config favorite ...  Gestionar favoritos\n")
 
 
 def cmd_plugin(args: list):
@@ -652,33 +650,33 @@ def cmd_plugin(args: list):
         plugins_dir = ensure_plugins_directory()
         plugin_file = plugins_dir / f"{args[1]}.py"
         plugin_file.write_text(code)
-        print(f"\n  {colorize(f'✅ Plugin creado:', 'green')} {plugin_file}\n")
+        print(f"\n  {colorize('✅ Plugin creado:', 'green')} {plugin_file}\n")
     else:
         print(f"\n  {colorize('Uso:', 'bold')}")
-        print(f"    bluesky plugin              Listar plugins")
-        print(f"    bluesky plugin list         Listar plugins")
-        print(f"    bluesky plugin info <name>  Info de un plugin")
-        print(f"    bluesky plugin create <name> [type]  Crear nuevo plugin\n")
+        print("    bluesky plugin              Listar plugins")
+        print("    bluesky plugin list         Listar plugins")
+        print("    bluesky plugin info <name>  Info de un plugin")
+        print("    bluesky plugin create <name> [type]  Crear nuevo plugin\n")
 
 
 def cmd_vuln(args: list):
     """Ejecuta VulnScanner - análisis de vulnerabilidades Bluetooth."""
     if not args or args[0] in ("-h", "--help"):
         print(f"\n{separator(title=' VulnScanner - Análisis de Vulnerabilidades ')}")
-        print(f"  Analiza un dispositivo contra 13+ vulnerabilidades Bluetooth conocidas:")
-        print(f"  KNOB, BIAS, BLUFFS, BlueBorne, BlueFrag, SweynTooth, etc.")
+        print("  Analiza un dispositivo contra 13+ vulnerabilidades Bluetooth conocidas:")
+        print("  KNOB, BIAS, BLUFFS, BlueBorne, BlueFrag, SweynTooth, etc.")
         print()
         print(f"  {colorize('USO:', 'bold')}")
-        print(f"    bluesky vuln <MAC>                    Análisis completo")
-        print(f"    bluesky vuln <MAC> --options '{{\"SCAN_TYPE\":\"quick\"}}'  Rápido")
-        print(f"    bluesky vuln <MAC> --options '{{\"REPORT\":\"true\"}}'     Con reporte HTML")
+        print("    bluesky vuln <MAC>                    Análisis completo")
+        print("    bluesky vuln <MAC> --options '{\"SCAN_TYPE\":\"quick\"}'  Rápido")
+        print("    bluesky vuln <MAC> --options '{\"REPORT\":\"true\"}'     Con reporte HTML")
         print()
         print(f"  {colorize('PASOS:', 'bold')}")
-        print(f"    1. Descubrir información del dispositivo")
-        print(f"    2. Escanear servicios SDP/RFCOMM")
-        print(f"    3. Detectar vulnerabilidades conocidas")
-        print(f"    4. Generar perfil de vulnerabilidad")
-        print(f"    5. Recomendar cadena de ataque")
+        print("    1. Descubrir información del dispositivo")
+        print("    2. Escanear servicios SDP/RFCOMM")
+        print("    3. Detectar vulnerabilidades conocidas")
+        print("    4. Generar perfil de vulnerabilidad")
+        print("    5. Recomendar cadena de ataque")
         print()
         return
 
@@ -777,25 +775,25 @@ def cmd_auto(args: list):
     """Ejecuta Autopilot - scan → vuln → attack → report automatizado."""
     if not args or args[0] in ("-h", "--help"):
         print(f"\n{separator(title=' Autopilot v2.0 - Automático ')}")
-        print(f"  Pipeline completo: Escaneo → Vuln Detection → Ataques → Reporte")
+        print("  Pipeline completo: Escaneo → Vuln Detection → Ataques → Reporte")
         print()
         print(f"  {colorize('USO:', 'bold')}")
-        print(f"    bluesky auto                  Auto a todos los dispositivos")
-        print(f"    bluesky auto <MAC>            Auto a target específico")
-        print(f"    bluesky auto --mode detect    Solo detectar vulnerabilidades")
-        print(f"    bluesky auto --mode attack    Solo fase de ataque")
+        print("    bluesky auto                  Auto a todos los dispositivos")
+        print("    bluesky auto <MAC>            Auto a target específico")
+        print("    bluesky auto --mode detect    Solo detectar vulnerabilidades")
+        print("    bluesky auto --mode attack    Solo fase de ataque")
         print()
         print(f"  {colorize('OPCIONES:', 'bold')}")
-        print(f"    --mode detect|attack|full     Modo de operación (default: full)")
-        print(f"    --chain \"mod1,mod2,mod3\"       Cadena personalizada de ataques")
-        print(f"    --timeout <n>                 Timeout por módulo (default: 30)")
+        print("    --mode detect|attack|full     Modo de operación (default: full)")
+        print("    --chain \"mod1,mod2,mod3\"       Cadena personalizada de ataques")
+        print("    --timeout <n>                 Timeout por módulo (default: 30)")
         print()
         print(f"  {colorize('PASOS (full):', 'bold')}")
-        print(f"    1. Escanear dispositivos Bluetooth")
-        print(f"    2. Detectar vulnerabilidades en cada uno")
-        print(f"    3. Construir cadena de ataque según vulns")
-        print(f"    4. Ejecutar ataques automáticamente")
-        print(f"    5. Generar reporte HTML")
+        print("    1. Escanear dispositivos Bluetooth")
+        print("    2. Detectar vulnerabilidades en cada uno")
+        print("    3. Construir cadena de ataque según vulns")
+        print("    4. Ejecutar ataques automáticamente")
+        print("    5. Generar reporte HTML")
         print()
         return
 
@@ -865,23 +863,23 @@ def cmd_spam(args: list):
     """Ejecuta BTSpam - Bluetooth Spam contra uno o TODOS los dispositivos."""
     if not args or args[0] in ("-h", "--help"):
         print(f"\n{separator(title=' BTSpam - Bluetooth Spam ')}")
-        print(f"  Inunda dispositivos Bluetooth con solicitudes de emparejamiento,")
-        print(f"  mensajes OBEX Push y conexiones RFCOMM.")
+        print("  Inunda dispositivos Bluetooth con solicitudes de emparejamiento,")
+        print("  mensajes OBEX Push y conexiones RFCOMM.")
         print()
         print(f"  {colorize('📋 PASOS DEL ATAQUE:', 'bold')}")
         print(f"    {colorize('Paso 1', 'cyan')}: Escaneo de dispositivos Bluetooth cercanos")
         print(f"    {colorize('Paso 2', 'cyan')}: Identificación de targets disponibles")
         print(f"    {colorize('Paso 3', 'cyan')}: Selección de técnicas de spam:")
-        print(f"             • pairing_flood    → solicitudes de emparejamiento")
-        print(f"             • obex_spam        → mensajes OBEX Push repetidos")
-        print(f"             • connection_flood → apertura/cierre masivo RFCOMM")
+        print("             • pairing_flood    → solicitudes de emparejamiento")
+        print("             • obex_spam        → mensajes OBEX Push repetidos")
+        print("             • connection_flood → apertura/cierre masivo RFCOMM")
         print(f"    {colorize('Paso 4', 'cyan')}: Ejecución multi-hilo simultánea")
         print(f"    {colorize('Paso 5', 'cyan')}: Monitoreo de estadísticas en tiempo real")
         print(f"    {colorize('Paso 6', 'cyan')}: Generación de resumen del ataque")
         print()
         print(f"  {colorize('🎯 ATAQUE A UN SOLO TARGET:', 'bold')}")
-        print(f"    bluesky spam AA:BB:CC:DD:EE:FF")
-        print(f"    bluesky spam AA:BB:CC:DD:EE:FF --method obex_spam --rate 50")
+        print("    bluesky spam AA:BB:CC:DD:EE:FF")
+        print("    bluesky spam AA:BB:CC:DD:EE:FF --method obex_spam --rate 50")
         print()
         print(f"  {colorize('🎯 ATAQUE A TODOS LOS DISPOSITIVOS (AUTOMÁTICO):', 'bold')}")
         print(f"    {colorize('bluesky spam all', 'green')}                      ← Escanea y ataca a todos")
@@ -890,17 +888,17 @@ def cmd_spam(args: list):
         print(f"    {colorize('bluesky spam all --rate 20 --duration 60', 'green')}")
         print()
         print(f"  {colorize('🎛️  OPCIONES:', 'bold')}")
-        print(f"    --method <m>     Método: all | pairing_flood | obex_spam | connection_flood")
-        print(f"    --rate <n>       Paquetes por segundo (1-100, default: 10)")
-        print(f"    --count <n>      Número de iteraciones (0=infinito, default: 50)")
-        print(f"    --duration <s>   Duración máxima en segundos (default: 30)")
-        print(f"    --delay <ms>     Delay entre ráfagas (default: 100)")
-        print(f"    --message <t>    Mensaje para OBEX Push (default: '👽 bluesky Spam!')")
+        print("    --method <m>     Método: all | pairing_flood | obex_spam | connection_flood")
+        print("    --rate <n>       Paquetes por segundo (1-100, default: 10)")
+        print("    --count <n>      Número de iteraciones (0=infinito, default: 50)")
+        print("    --duration <s>   Duración máxima en segundos (default: 30)")
+        print("    --delay <ms>     Delay entre ráfagas (default: 100)")
+        print("    --message <t>    Mensaje para OBEX Push (default: '👽 bluesky Spam!')")
         print()
         print(f"  {colorize('💡 EJEMPLOS RÁPIDOS:', 'bold')}")
-        print(f"    bluesky spam all                          # Atacar a todos")
-        print(f"    bluesky spam AA:BB:CC:DD:EE:FF            # Atacar MAC específica")
-        print(f"    bluesky spam all --method connection_flood --rate 50  # Flood de conexiones a todos")
+        print("    bluesky spam all                          # Atacar a todos")
+        print("    bluesky spam AA:BB:CC:DD:EE:FF            # Atacar MAC específica")
+        print("    bluesky spam all --method connection_flood --rate 50  # Flood de conexiones a todos")
         print()
         return
 
@@ -1045,6 +1043,40 @@ def cmd_web(args: list):
         print(f"\n  {colorize('✘ Error:', 'red')} {e}\n")
 
 
+def cmd_educate(args: list):
+    """Modo educativo: explica un módulo paso a paso (qué/cómo/impacto/mitigación)."""
+    from bluesky.core.education import (
+        get_education, covered_modules, format_education_plain,
+        format_education_rich, EDU_DB,
+    )
+
+    if args:
+        name = args[0]
+        entry = get_education(name)
+        if entry is None:
+            print(f"  {colorize('✘', 'red')} Sin contenido educativo para '{name}'")
+            print(f"  Disponibles: {', '.join(covered_modules())}")
+            return
+    else:
+        # Índice de contenidos
+        print(f"\n  {colorize('📚 MODO EDUCATIVO — contenidos', 'bold')}\n")
+        for m in covered_modules():
+            print(f"    {colorize(m, 'cyan'):18} {EDU_DB[m]['title']}")
+        print(f"\n  Uso: {colorize('bluesky educate <módulo>', 'green')}\n")
+        return
+
+    if not sys.stdout.isatty():
+        print(format_education_plain(entry))
+        return
+
+    try:
+        from rich.console import Console
+        console = Console()
+        format_education_rich(entry, console)
+    except Exception:
+        print(format_education_plain(entry))
+
+
 def main():
     """Punto de entrada principal."""
     # Parsear --config global ANTES de determinar el comando
@@ -1076,7 +1108,7 @@ def main():
     args = clean_args[1:]
 
     # Comandos que no requieren banner
-    no_banner = ["scan", "list", "status", "console", "web"]
+    no_banner = ["scan", "list", "status", "console", "web", "educate"]
 
     if command not in no_banner:
         print_banner()
@@ -1087,7 +1119,7 @@ def main():
         bt_active, bt_msg = get_adapter_status()
         if not bt_active:
             print(f"  {colorize('⚠️', 'yellow')} {bt_msg}")
-            print(f"  Algunos módulos pueden no funcionar correctamente.\n")
+            print("  Algunos módulos pueden no funcionar correctamente.\n")
 
     # Routing de comandos
     commands = {
@@ -1106,6 +1138,7 @@ def main():
         "config": lambda: cmd_config(args),
         "plugin": lambda: cmd_plugin(args),
         "web": lambda: cmd_web(args),
+        "educate": lambda: cmd_educate(args),
         "help": lambda: (print_banner(), print_help()),
     }
 

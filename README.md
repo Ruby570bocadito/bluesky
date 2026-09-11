@@ -174,6 +174,7 @@ bluesky> run
 | `run` / `exploit` | Execute selected module |
 | `back` | Unselect current module |
 | `search <query>` | Search modules by keyword |
+| `educate [módulo]` | Explicación educativa paso a paso (qué es, cómo funciona, mitigación) |
 | `scan` | Run auto-discovery scan |
 | `sessions -l` | List active sessions |
 | `sessions -i <id>` | Interact with session |
@@ -185,31 +186,43 @@ bluesky> run
 
 ---
 
-## 📊 Web Dashboard Preview
+## 📊 Web Dashboard
 
-> Flask-based real-time web interface for scan monitoring and module management.
+> Interfaz web minimalista y 100% offline (sin CDN ni fuentes externas) para monitorizar escaneos, explorar el catálogo de módulos y consultar el modo educativo.
 
+![Dashboard](docs/screenshot_dashboard.png)
+
+![Detalle de módulo con modo educativo](docs/screenshot_module.png)
+
+Características:
+
+- **Dashboard en vivo** — estado del adaptador, uptime, distribución de severidad del catálogo y actividad reciente con auto-refresh.
+- **Catálogo de módulos** — filtrado por nombre/tipo, con detalle por módulo, opciones y referencias CVE.
+- **Modo educativo integrado** — cada módulo incluye su explicación paso a paso y cómo mitigarlo, tanto en web como en CLI.
+- **Escaneo en vivo** — lanza inquiry/BLE o enumeración SDP/GATT desde el navegador con resultados en tiempo real.
+- **Sesiones, reportes y logs** — visor integrado con renderizado seguro (`textContent`, sin inyección de markup) y protección contra *path traversal* en la API de reportes.
+
+Accede en `http://localhost:5000` tras ejecutar `python -m bluesky web`.
+
+---
+
+## 🎓 Modo Educativo
+
+Cada módulo documenta **qué es, cómo funciona paso a paso, su impacto y cómo mitigarlo**. Diseñado para formación en seguridad Bluetooth con foco en el defensor:
+
+```bash
+# Desde el CLI
+bluesky educate              # índice de contenidos
+bluesky educate knob         # KNOB (CVE-2019-9506) explicado
+
+# Desde la consola REPL
+bluesky> educate bias
+
+# Desde la web
+# Módulos → knob → sección "Modo educativo"
 ```
-┌─────────────────────────────────────────────────┐
-│  🔵 bluesky Dashboard           [🔄] [⚙️] [❌] │
-├─────────────────────────────────────────────────┤
-│  ┌──────────┐  ┌──────────┐  ┌────────────────┐ │
-│  │ Devices  │  │ Attacks  │  │    Alerts      │ │
-│  │ Found: 12│  │ Running:3│  │  Critical: 2   │ │
-│  │ BLE: 8   │  │ Queued: 5│  │  Warning: 4    │ │
-│  │ Classic:4│  │ Done: 47 │  │  Info: 12      │ │
-│  └──────────┘  └──────────┘  └────────────────┘ │
-│  ┌──────────────────────────────────────────────┐│
-│  │  [Live Scan Log]                            ││
-│  │  [10:32:01] ✓ Device 00:11:22:33:44:55      ││
-│  │  [10:32:03] ⚠ KNOB vulnerable found          ││
-│  │  [10:32:05] ✗ Exploit failed: no target      ││
-│  └──────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────┘
-```
 
-Access at `http://localhost:5000` after running `python -m bluesky web`.
-
+Cobertura: los 22 módulos del catálogo (ataques, escáneres, exploits y plugins) incluyen contenido educativo con mitigaciones accionables.
 ---
 
 ## 🛠️ Requirements

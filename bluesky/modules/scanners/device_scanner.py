@@ -6,10 +6,10 @@ Soporta Windows (PowerShell, bleak), Linux (BlueZ tools) y Termux.
 import subprocess
 import re
 import time
-from typing import List, Optional
+from typing import List
 
 from bluesky.core.engine import BaseModule
-from bluesky.utils.platform import is_windows, is_termux, check_bleak, check_command
+from bluesky.utils.platform import is_windows, check_bleak
 
 
 class DeviceScanner(BaseModule):
@@ -27,8 +27,8 @@ class DeviceScanner(BaseModule):
 
     def run(self):
         """Ejecuta escaneo de dispositivos (cross-platform)."""
-        scan_type = self.options.get("type", "all")  # all | classic | ble
-        timeout = int(self.options.get("timeout", 8))
+        scan_type = str(self.options.get("type") or "all")
+        timeout = self._opt_int("timeout", 8)
         self.result["data"]["scan_type"] = scan_type
         self.result["data"]["scan_time"] = timeout
 
@@ -192,17 +192,18 @@ class DeviceScanner(BaseModule):
 
     def _scan_classic_windows_winrt(self, timeout: int) -> List[dict]:
         """Escanea Classic en Windows via WinRT (Windows 10+)."""
-        ps_script = f"""
+        devices = []
+        ps_script = """
         Add-Type -AssemblyName System.Runtime.WindowsRuntime
         $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | 
-            Where-Object {{ $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and 
-            $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' }})[0]
-        Function Await($WinRtTask, $ResultType) {{
+            Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and 
+            $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+        Function Await($WinRtTask, $ResultType) {
             $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
             $netTask = $asTask.Invoke($null, @($WinRtTask))
             $netTask.Wait(-1) | Out-Null
             $netTask.Result
-        }}
+        }
         [Windows.Devices.Bluetooth.BluetoothDevice,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
         [Windows.Devices.Enumeration.DeviceInformation,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
 
@@ -210,12 +211,12 @@ class DeviceScanner(BaseModule):
         $devices = Await ([Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync($selector)) ([Windows.Devices.Enumeration.DeviceInformationCollection])
 
         $result = @()
-        foreach ($d in $devices) {{
-            $result += [PSCustomObject]@{{
+        foreach ($d in $devices) {
+            $result += [PSCustomObject]@{
                 Name = $d.Name
                 Id   = $d.Id
-            }}
-        }}
+            }
+        }
         return $result | ConvertTo-Json -Compress
         """
         try:
@@ -386,10 +387,13 @@ class DeviceScanner(BaseModule):
         """Obtiene información de dispositivo en Windows."""
         info = {"rssi": 0, "paired": False}
 
+        # Sanitizar la MAC: solo puede contener hex (viene de dispositivos
+        # descubiertos y se interpola dentro de un script PowerShell).
+        mac_clean = re.sub(r"[^0-9A-Fa-f]", "", mac)
         ps_script = f"""
         $bt = Get-WmiObject -Class Win32_BluetoothDevice -ErrorAction SilentlyContinue |
-              Where-Object {{ $_.DeviceID -like '*{mac.replace(":", "").upper()}*' -or 
-                             $_.DeviceID -like '*{mac.replace(":", "").lower()}*' }}
+              Where-Object {{ $_.DeviceID -like '*{mac_clean.upper()}*' -or 
+                             $_.DeviceID -like '*{mac_clean.lower()}*' }}
         if ($bt) {{
             $result = [PSCustomObject]@{{
                 Connected = $bt.Connected

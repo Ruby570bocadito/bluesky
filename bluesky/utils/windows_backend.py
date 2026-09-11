@@ -10,16 +10,12 @@ así que usamos:
   - Windows Registry para información del hardware
 """
 
-import os
 import re
-import sys
 import json
-import time
 import subprocess
-import platform
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
-from .platform import is_windows, check_bleak, check_command
+from .platform import is_windows, check_command
 
 
 # ─── PowerShell Scripts Embebidos ──────────────────────────────────────────
@@ -363,4 +359,4 @@ def enable_bluetooth_windows() -> bool:
     return 'FAIL'
     """
     raw = _run_powershell(ps_script)
-    return raw and "OK" in raw
+    return bool(raw and "OK" in raw)

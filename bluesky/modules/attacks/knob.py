@@ -21,12 +21,11 @@ Referencia:
 
 from __future__ import annotations
 
-import struct
 import time
 import subprocess
 import shutil
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from bluesky.core.engine import BaseModule
 
@@ -45,6 +44,17 @@ try:
         HCI_ACL_Hdr, L2CAP_Hdr, L2CAP_ConfReq, L2CAP_ConfResp,
         L2CAP_ConnReq, L2CAP_ConnResp, L2CAP_CmdHdr, L2CAP_CmdRej,
         BluetoothHCISocket,
+    )
+    # Sondeo de disponibilidad de la pila HCI/L2CAP de scapy.
+    _SCAPY_PROBE = (
+        HCI_Command_Hdr, HCI_Event_Command_Complete, HCI_Event_Command_Status,
+        HCI_Event_Connection_Complete, HCI_Event_Encryption_Change,
+        HCI_Event_Disconnection_Complete, HCI_Event_Number_Of_Completed_Packets,
+        HCI_Cmd_Inquiry, HCI_Cmd_Create_Connection, HCI_Cmd_Disconnect,
+        HCI_Cmd_Set_Connection_Encryption, HCI_Cmd_Write_Connect_Accept_Timeout,
+        HCI_Cmd_Read_BD_Addr, HCI_Cmd_Reset,
+        HCI_ACL_Hdr, L2CAP_Hdr, L2CAP_ConfResp,
+        L2CAP_ConnReq, L2CAP_ConnResp, L2CAP_CmdRej,
     )
     SCAPY_AVAILABLE = True
 except ImportError:
@@ -108,7 +118,7 @@ class Knob(BaseModule):
         super().__init__(target, options)
         self._hci_socket = None
         self._hci_device = self.options.get("HCI_DEVICE", "hci0")
-        self._force_key_size = int(self.options.get("FORCE_KEY_SIZE", str(self.MIN_KEY_SIZE)))
+        self._force_key_size = self._opt_int("FORCE_KEY_SIZE", self.MIN_KEY_SIZE)
 
     def run(self):
         """Punto de entrada principal."""
@@ -211,9 +221,12 @@ class Knob(BaseModule):
 
         # Indicador 3: Capacidad de ataque activo
         if SCAPY_AVAILABLE:
-            result_data["attack_possible"] = self._check_hardware_capability()
-            if result_data["attack_possible"]:
+            hw_ok = self._check_hardware_capability()
+            if hw_ok:
+                result_data["attack_possible"] = True
                 result_data["indicators"].append("Ataque activo posible (scapy + HCI disponible)")
+            else:
+                result_data["attack_possible"] = False
 
         # Conclusión
         confidence_score = 0
@@ -311,7 +324,6 @@ class Knob(BaseModule):
         if not self._check_hardware_capability():
             return self._simulate_attack(mac)
 
-        hw_ok = True
         self.result["data"]["hardware_available"] = True
 
         # Etapa 2: Abrir HCI socket
@@ -375,9 +387,9 @@ class Knob(BaseModule):
     def _no_scapy_result(self, mac: str) -> dict:
         """Resultado cuando scapy no está instalado."""
         self.result["data"]["message"] = (
-            f"⚠️  KNOB activo requiere scapy.\n"
-            f"   Instala: pip install scapy\n"
-            f"   O usa detección pasiva sin EXECUTE=True"
+            "⚠️  KNOB activo requiere scapy.\n"
+            "   Instala: pip install scapy\n"
+            "   O usa detección pasiva sin EXECUTE=True"
         )
         self.result["data"]["attack_result"] = "unavailable"
         self.result["success"] = True
@@ -457,7 +469,7 @@ class Knob(BaseModule):
         Returns:
             Dict con resultado de la captura.
         """
-        timeout = int(self.options.get("TIMEOUT", "30"))
+        timeout = self._opt_int("TIMEOUT", 30)
         log.info(f"Esperando pairing de {mac} (timeout={timeout}s)...")
 
         start = time.time()
@@ -595,7 +607,7 @@ class Knob(BaseModule):
         Returns:
             Dict con resultado de verificación.
         """
-        timeout = int(self.options.get("TIMEOUT", "30"))
+        timeout = self._opt_int("TIMEOUT", 30)
         weakened = False
         start = time.time()
 

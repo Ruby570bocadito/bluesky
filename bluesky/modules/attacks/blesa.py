@@ -5,7 +5,6 @@ Detecta dispositivos BLE vulnerables a suplantación durante reconexión.
 
 import subprocess
 import time
-from typing import Optional
 
 from bluesky.core.engine import BaseModule
 

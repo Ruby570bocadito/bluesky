@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 """Tests para core/plugin_loader.py"""
 
-import os
 import tempfile
 import pytest
 from pathlib import Path
 from bluesky.core.plugin_loader import (
     PluginLoader,
-    PluginInfo,
-    PluginError,
     PluginNotFound,
     create_plugin_template,
-    ensure_plugins_directory,
 )
 
 
@@ -189,7 +185,6 @@ class TestPluginIntegration:
         engine = ModuleEngine(load_plugins=True)
         names = [m.get("name") for m in engine.list_modules()]
         # Si el plugin demo_scanner está en plugins/, debe aparecer
-        import os
         demo_path = Path(__file__).parent.parent / "plugins" / "demo_scanner.py"
         if demo_path.exists():
             assert "demo_scanner" in names

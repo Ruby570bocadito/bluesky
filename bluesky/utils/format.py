@@ -41,8 +41,8 @@ def colorize(text: str, color: str) -> str:
     return f"{c}{text}{reset}"
 
 
-def severity_icon(severity: str) -> str:
-    """Retorna icono para nivel de severidad."""
+def severity_icon(severity) -> str:
+    """Retorna icono para nivel de severidad (tolera None/no-string)."""
     icons = {
         "critical": "🔴",
         "high": "🟠",
@@ -50,17 +50,17 @@ def severity_icon(severity: str) -> str:
         "low": "⚪",
         "info": "ℹ️",
     }
-    return icons.get(severity.lower(), "⚪")
+    return icons.get(str(severity or "").lower(), "⚪")
 
 
-def target_type_icon(ttype: str) -> str:
-    """Retorna icono para tipo de target."""
+def target_type_icon(ttype) -> str:
+    """Retorna icono para tipo de target (tolera None/no-string)."""
     icons = {
         "classic": "📡",
         "ble": "🔵",
         "both": "🔄",
     }
-    return icons.get(ttype.lower(), "📡")
+    return icons.get(str(ttype or "").lower(), "📡")
 
 
 def format_device_list(devices: list) -> str:
@@ -70,6 +70,10 @@ def format_device_list(devices: list) -> str:
 
     lines = []
     for i, dev in enumerate(devices, 1):
+        if not isinstance(dev, dict):
+            # Entrada malformada (p.ej. MAC como string de un JSON a mano)
+            lines.append(f"  {i:2d}. {dev}")
+            continue
         name = dev.get("name", "Unknown")
         mac = dev.get("mac", "N/A")
         rssi = dev.get("rssi", "")
@@ -88,6 +92,9 @@ def format_service_list(services: list) -> str:
 
     lines = []
     for svc in services:
+        if not isinstance(svc, dict):
+            lines.append(f"  ⚠️  {svc}")
+            continue
         name = svc.get("name", "Unknown")
         channel = svc.get("channel", "")
         risk = svc.get("risk", "low")

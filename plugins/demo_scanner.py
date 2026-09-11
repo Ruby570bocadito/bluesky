@@ -4,7 +4,7 @@ bluesky Plugin: demo_scanner
 Escáner Bluetooth de demostración - descubre dispositivos simulados.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 
 PLUGIN_INFO = {
     "name": "demo_scanner",
@@ -65,6 +65,6 @@ class DemoScanner:
             "name": self.name,
             "description": self.description,
             "version": "1.0.0",
-    "author": "Ruby570bocadito",
+            "author": "Ruby570bocadito",
             "type": "scanner",
         }
