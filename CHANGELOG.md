@@ -4,6 +4,47 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.4.0] - 2026-09-12
+
+### Añadido
+
+- **CLI re-hecho sobre argparse** (`bluesky/cli.py`): cada subcomando tiene
+  ahora ayuda propia (`bluesky scan --help`), validación estricta de opciones
+  (puertos 1-65535, `--rate` 1-100, JSON de opciones verificado) y una ayuda
+  principal agrupada por secciones (auditoría / catálogo / entorno / interfaz).
+- **Exit codes consistentes**: `0` operación correcta, `1` error de ejecución,
+  `2` error de uso — tanto en `python -m bluesky` como en el entry point pip.
+- **Salida `--json`** para scripting en `scan`, `services`, `attack`, `vuln`,
+  `auto`, `spam`, `list`, `info` y `status` (global o por comando; suprime
+  banner y avisos para producir JSON limpio).
+- **`--no-color`** global y soporte de la convención `NO_COLOR`.
+- **Sugerencias con difflib**: `bluesky attack bluej` → "¿quisiste decir
+  bluejacking?"; también para `info` y para comandos desconocidos.
+
+### Cambiado
+
+- **Web dashboard en modo oscuro**: paleta slate profundo tipo GitHub Dark
+  (superficie `#161b22`, texto `#e6edf3`, acento `#4493f8`), `color-scheme:
+  dark` para controles nativos, fix de autofill en inputs y favicon alineado
+  al acento. Capturas regeneradas.
+- Salida del CLI más sobria: banner compacto de 2 líneas y estados `OK` /
+  `AVISO` / `ERROR` en lugar de arte ASCII y emojis dispersos.
+- `bluesky report` vuelve a respetar `general.report_format` de la
+  configuración como formato por defecto.
+
+### Limpieza
+
+- Eliminados los artefactos `docs/demo_report.{txt,html,json}` del repositorio
+  (los genera `scripts/demo.sh` en runtime; estaban committeados por error).
+- `TESTING_WINDOWS.md` movido a `docs/`; `.ruff_cache/` al `.gitignore`;
+  números desactualizados de `scripts/demo.sh` corregidos (22 módulos,
+  3 escáneres, 290+ tests).
+
+### Tests
+
+- 292 tests en verde (100% offline) tras la reescritura del CLI; contrato de
+  compatibilidad preservado (`cmd_web`, `cmd_educate`, dispatch y `no_banner`).
+
 ## [0.3.0] - 2026-09-11
 
 ### Añadido

@@ -63,3 +63,6 @@ session.txt
 *.swp
 *.swo
 *~
+
+# Ruff
+.ruff_cache/

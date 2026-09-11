@@ -1,251 +1,197 @@
 <div align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:00BFFF,100:0066CC&height=250&section=header&text=bluesky&fontSize=70&fontColor=ffffff&animation=twinkling&fontAlignY=35&desc=Bluetooth%20Security%20Auditing%20Framework&descAlignY=55&descSize=20" width="100%" />
+
+# bluesky
+
+**Framework de auditoría de seguridad Bluetooth — estilo Metasploit, en Python.**
+
+Escáneres BR/EDR y BLE · 14 módulos de ataque · 3 exploits · 13+ checks de vulnerabilidades · consola REPL · dashboard web · modo educativo.
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-4493f8?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![CI](https://img.shields.io/github/actions/workflow/status/Ruby570bocadito/bluesky/ci.yml?style=flat-square&label=tests&branch=main)](https://github.com/Ruby570bocadito/bluesky/actions)
+[![Tests](https://img.shields.io/badge/tests-292%20offline-3fb950?style=flat-square)](https://github.com/Ruby570bocadito/bluesky/actions)
+[![Platform](https://img.shields.io/badge/plataforma-Linux%20%7C%20Windows%20%7C%20Termux-6e7681?style=flat-square)](#compatibilidad)
+[![License](https://img.shields.io/github/license/Ruby570bocadito/bluesky?style=flat-square)](LICENSE)
+
+![Dashboard de bluesky en modo oscuro](docs/screenshot_dashboard.png)
+
 </div>
 
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=22&pause=800&color=00BFFF&center=true&vCenter=true&width=600&lines=Bluetooth+Security+Auditing+Framework;Metasploit-style+Attack+Suite;15%2B+Attack+Modules;3+Scanners+%7C+3+Exploits;13%2B+Vulnerability+Checks;REPL+Console+%7C+Web+Dashboard;Python+%7C+Battle-Tested+%7C+Modular" alt="Typing SVG" />
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10%2B-00BFFF?style=for-the-badge&logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/Bluetooth-Classic_%2F_BLE-0066CC?style=for-the-badge&logo=bluetooth&logoColor=white" />
-  <img src="https://img.shields.io/badge/BLE-5.0-1E90FF?style=for-the-badge&logo=bluetooth&logoColor=white" />
-  <img src="https://img.shields.io/github/license/Ruby570bocadito/bluesky?style=for-the-badge&labelColor=0d1117&color=0055AA" />
-  <img src="https://img.shields.io/badge/Platform-Linux_%7C_Windows_%7C_macOS-0077CC?style=for-the-badge&logo=linux&logoColor=white" />
-  <br/>
-  <img src="https://img.shields.io/badge/Modules-15%2B-00AAFF?style=for-the-badge&logo=automation&logoColor=white" />
-  <img src="https://img.shields.io/badge/Scanners-3-0099EE?style=for-the-badge&logo=libreoffice&logoColor=white" />
-  <img src="https://img.shields.io/badge/Exploits-3-0088DD?style=for-the-badge&logo=meteor&logoColor=white" />
-  <img src="https://img.shields.io/badge/Vuln_Checks-13%2B-0077CC?style=for-the-badge&logo=checkmarx&logoColor=white" />
-  <img src="https://img.shields.io/badge/REPL-Console-0066BB?style=for-the-badge&logo=gnubash&logoColor=white" />
-  <img src="https://img.shields.io/badge/Dashboard-Web-0055AA?style=for-the-badge&logo=webpack&logoColor=white" />
-  <img src="https://img.shields.io/github/actions/workflow/status/Ruby570bocadito/bluesky/ci.yml?style=for-the-badge&logo=githubactions&label=build&branch=main" />
-</p>
-
-
-
 ---
 
-## Arquitectura
+## ¿Qué es?
 
-```mermaid
-graph TB
-    subgraph CLI["💻 bluesky Console"]
-        REPL["REPL Shell"]
-        CMD["Command Parser"]
-        LOAD["Module Loader"]
-    end
+bluesky es un framework modular para **auditar dispositivos Bluetooth clásicos y BLE** de forma organizada y repetible: descubre dispositivos cercanos, enumera sus servicios, los analiza contra un catálogo de vulnerabilidades conocidas (KNOB, BIAS, BLUFFS, BlueBorne, SweynTooth…) y ejecuta módulos de prueba siguiendo el flujo `use → set → run` de Metasploit. Todo el ciclo queda registrado en sesiones y se exporta a reportes en TXT, HTML o JSON.
 
-    subgraph SCANNERS["📡 Scanners"]
-        S1["Classic Scanner<br/><i>L2CAP/RFCOMM</i>"]
-        S2["BLE Scanner<br/><i>GATT/Advertising</i>"]
-        S3["Service Discovery<br/><i>SDP Enumeration</i>"]
-    end
+Está pensado como herramienta de **formación y auditoría autorizada**: cada módulo incluye un modo educativo que explica qué hace, cómo funciona paso a paso y cómo mitigarlo. El dashboard web y el catálogo de módulos están 100% offline (sin CDNs ni llamadas externas).
 
-    subgraph ATTACKS["⚔️ Attack Modules (15+)"]
-        A1["🔹 BR/EDR Attacks<br/>- L2CAP Flood<br/>- RFCOMM DoS<br/>- SDP Overflow"]
-        A2["🔹 BLE Attacks<br/>- LLDoS<br/>- ATT Write<br/>- GATT Spam"]
-        A3["🔹 Advanced<br/>- BTLeJack<br/>- KNOB Crack<br/>- MAC Spoof"]
-        A4["🔹 Auxiliary<br/>- Recon Live<br/>- BT Proxy<br/>- HCI Dump"]
-    end
+> ⚠️ **Uso ético.** Ejecuta bluesky únicamente sobre equipos y redes para los que tengas autorización explícita. El autor no se hace responsable del mal uso.
 
-    subgraph VULNS["🔍 Vulnerability Checks (13+)"]
-        V1["- CVE-2023-45866<br/>- CVE-2023-24022<br/>- CVE-2022-2222<br/>- BlueBorne"]
-        V2["- KNOB Attack<br/>- BTJacking<br/>- BlueSmack<br/>- MAC Flood"]
-        V3["- SSP Bypass<br/>- PIN Bruteforce<br/>- HCI Injection<br/>- SDP Redirect"]
-    end
+## Características
 
-    subgraph EXPLOITS["💥 Exploit Modules"]
-        E1["Exploit: btlejacking"]
-        E2["Exploit: knob_crack"]
-        E3["Exploit: bluetooth_shell"]
-    end
+- **3 escáneres** — descubrimiento BR/EDR + BLE, enumeración SDP y análisis de vulnerabilidades (13+ checks con CVE).
+- **14 módulos de ataque + 3 exploits** — KNOB, BIAS, BLUFFS, BlueBorne, BlueFrag, BLESA, SweynTooth, WhisperPair, Crackle, BlueSmack, inyección de teclas, fuzzing L2CAP y shell RFCOMM.
+- **Consola REPL** estilo Metasploit con autocompletado, favoritos y sesiones persistentes.
+- **CLI moderno** — argparse con ayuda por comando, exit codes consistentes (0/1/2), salida `--json` para scripting y modo `--no-color`.
+- **Autopilot** — pipeline automático de 4 fases: escaneo → detección de vulnerabilidades → cadena de ataques → reporte.
+- **Modo educativo** — cada módulo documentado: qué es, cómo funciona, impacto y mitigaciones (en CLI, consola y web).
+- **Dashboard web** — Flask, en modo oscuro, con escaneo en vivo, catálogo de módulos, sesiones, reportes y logs; renderizado seguro sin inyección de markup.
+- **Multiplataforma** — Linux (BlueZ), Windows, Termux (Android) y WSL, con detección automática de backends.
 
-    subgraph DASHBOARD["📊 Web Dashboard"]
-        W1["Flask Backend"]
-        W2["Real-time Scan View"]
-        W3["Module Manager"]
-        W4["Report Generator"]
-    end
-
-    REPL --> CMD --> LOAD
-    LOAD --> SCANNERS
-    LOAD --> ATTACKS
-    LOAD --> VULNS
-    LOAD --> EXPLOITS
-    SCANNERS --> DASHBOARD
-    ATTACKS --> DASHBOARD
-    VULNS --> DASHBOARD
-    EXPLOITS --> DASHBOARD
-
-    style REPL fill:#003366,color:#fff
-    style CMD fill:#003366,color:#fff
-    style LOAD fill:#003366,color:#fff
-    style SCANNERS fill:#004488,color:#fff
-    style ATTACKS fill:#0055AA,color:#fff
-    style VULNS fill:#0066CC,color:#fff
-    style EXPLOITS fill:#0077DD,color:#fff
-    style DASHBOARD fill:#0088EE,color:#fff
-```
-
----
-
-## ⚡ Quick Start
+## Instalación
 
 ```bash
-# Clone
 git clone https://github.com/Ruby570bocadito/bluesky.git
 cd bluesky
-
-# Install dependencies
 pip install -r requirements.txt
 
-# Launch console
-python -m bluesky
-
-# Launch web dashboard
-python -m bluesky web --port 5000
-
-# Run scan
-bluesky> use scanner/ble_scan
-bluesky> set interface hci0
-bluesky> run
+# (opcional) instalar como comando global
+pip install .
 ```
 
----
+En Termux: `bash scripts/install_termux.sh` · En Windows: `scripts/install_windows.ps1` · Docker: `docker-compose up`.
 
-## 🎯 Attack Modules (15+)
-
-| Module | Type | Target | Description |
-|--------|------|--------|-------------|
-| `scanner/device_scanner` | Scanner | BR/EDR + BLE | Classic & BLE device discovery |
-| `scanner/service_scanner` | Scanner | SDP | SDP service enumeration |
-| `scanner/vuln_scanner` | Scanner | All | 13+ CVE vulnerability checks |
-| `attack/knob` | Attack | BR/EDR | KNOB attack entropy brute-force |
-| `attack/bias` | Attack | BR/EDR | BIAS attack (Bluetooth Impersonation) |
-| `attack/bluffs` | Attack | BR/EDR | BLUFFS attack (Bluetooth Forward/Future Secrecy) |
-| `attack/blueborne` | Attack | BR/EDR | BlueBorne RCE exploit |
-| `attack/bluefrag` | Attack | BLE | BlueFrag RCE (Android BLE) |
-| `attack/blesa` | Attack | BLE | BLESA connection re-establishment attack |
-| `attack/bluejacking` | Attack | Generic | BlueJacking (OBEX push spam) |
-| `attack/bluesnarfing` | Attack | Generic | BlueSnarfing (OBEX data pull) |
-| `attack/bluebugging` | Attack | Generic | BlueBugging (AT command injection) |
-| `attack/sweyntooth` | Attack | BLE | SweynTooth BLE DoS/RCE suite |
-| `attack/whisperpair` | Attack | BLE | WhisperPair pairing bypass |
-| `attack/crackle` | Attack | BLE | Crackle BLE encryption cracker |
-| `attack/btlejack` | Attack | BLE | BTLEJack injection & sniffing |
-| `attack/btspam` | Attack | Generic | BTSpam flood (3 techniques) |
-| `attack/autopilot` | Auxiliary | All | 4-phase auto scan→detect→attack→report |
-| `exploit/keystroke_injection` | Exploit | HID | Bluetooth keystroke injection |
-| `exploit/l2cap_fuzz` | Exploit | L2CAP | L2CAP protocol fuzzing |
-| `exploit/rfcomm_shell` | Exploit | RFCOMM | RFCOMM reverse shell |
-
----
-
-## 🔍 Vulnerability Checks (13+)
-
-| Check | Module | CVE/Reference | Impact |
-|-------|--------|---------------|--------|
-| BlueBorne | `vuln/blueborne` | CVE-2017-0781 | RCE via BT stack |
-| KNOB Attack | `vuln/knob` | CVE-2019-9506 | Entropy downgrade to 1 byte |
-| BlueSmack | `vuln/bluesmack` | CVE-2005-1234 | L2CAP ping-of-death DoS |
-| BTJacking | `vuln/btjacking` | CVE-2018-5383 | Impersonation / pairing bypass |
-| MAC Flooding | `vuln/mac_flood` | CVE-2020-26558 | Connection reset / tracking |
-| SSP Bypass | `vuln/ssp_bypass` | CVE-2020-26557 | Secure Simple Pairing MitM |
-| PIN BruteForce | `vuln/pin_brute` | CVE-2020-26556 | PIN cracking (6-digit) |
-| HCI Injection | `vuln/hci_inject` | CVE-2021-31798 | HCI command injection |
-| SDP Redirect | `vuln/sdp_redirect` | CVE-2020-26555 | SDP service record spoofing |
-| CVE-2023-45866 | `vuln/cve_2023_45866` | CVE-2023-45866 | Auth bypass on Android/Linux |
-| CVE-2023-24022 | `vuln/cve_2023_24022` | CVE-2023-24022 | BT stack info leak |
-| CVE-2022-2222 | `vuln/cve_2022_2222` | CVE-2022-2222 | Double free in BlueZ |
-| CVE-2024-xxxx | `vuln/cve_2024_check` | Reserved | Bleeding-edge CVE checks |
-
----
-
-## 🖥️ Console Commands
-
-| Command | Description |
-|---------|-------------|
-| `help` | Show available commands |
-| `show modules` | List all loaded modules |
-| `show options` | Show current module options |
-| `use <module>` | Select a module to use |
-| `set <option> <value>` | Set module option |
-| `run` / `exploit` | Execute selected module |
-| `back` | Unselect current module |
-| `search <query>` | Search modules by keyword |
-| `educate [módulo]` | Explicación educativa paso a paso (qué es, cómo funciona, mitigación) |
-| `scan` | Run auto-discovery scan |
-| `sessions -l` | List active sessions |
-| `sessions -i <id>` | Interact with session |
-| `history` | Show command history |
-| `log` | Enable/disable session logging |
-| `exit` / `quit` | Exit the console |
-| `clear` | Clear terminal screen |
-| `dashboard` | Launch web dashboard |
-
----
-
-## 📊 Web Dashboard
-
-> Interfaz web minimalista y 100% offline (sin CDN ni fuentes externas) para monitorizar escaneos, explorar el catálogo de módulos y consultar el modo educativo.
-
-![Dashboard](docs/screenshot_dashboard.png)
-
-![Detalle de módulo con modo educativo](docs/screenshot_module.png)
-
-Características:
-
-- **Dashboard en vivo** — estado del adaptador, uptime, distribución de severidad del catálogo y actividad reciente con auto-refresh.
-- **Catálogo de módulos** — filtrado por nombre/tipo, con detalle por módulo, opciones y referencias CVE.
-- **Modo educativo integrado** — cada módulo incluye su explicación paso a paso y cómo mitigarlo, tanto en web como en CLI.
-- **Escaneo en vivo** — lanza inquiry/BLE o enumeración SDP/GATT desde el navegador con resultados en tiempo real.
-- **Sesiones, reportes y logs** — visor integrado con renderizado seguro (`textContent`, sin inyección de markup) y protección contra *path traversal* en la API de reportes.
-
-Accede en `http://localhost:5000` tras ejecutar `python -m bluesky web`.
-
----
-
-## 🎓 Modo Educativo
-
-Cada módulo documenta **qué es, cómo funciona paso a paso, su impacto y cómo mitigarlo**. Diseñado para formación en seguridad Bluetooth con foco en el defensor:
+## Inicio rápido
 
 ```bash
-# Desde el CLI
+# Estado del hardware Bluetooth
+bluesky status
+
+# Escanear dispositivos (BLE o clásico)
+bluesky scan --ble --timeout 12
+
+# Analizar vulnerabilidades de un dispositivo
+bluesky vuln AA:BB:CC:DD:EE:FF
+
+# Ejecutar un módulo
+bluesky attack bluejacking AA:BB:CC:DD:EE:FF
+
+# Pipeline automático
+bluesky auto --mode detect
+
+# Consola interactiva
+bluesky console
+```
+
+```text
+$ bluesky console
+bluesky > use scanner/ble_scan
+bluesky (ble_scan) > set interface hci0
+bluesky (ble_scan) > run
+```
+
+## CLI
+
+| Comando | Descripción |
+|---------|-------------|
+| `scan [--ble\|--classic] [--timeout S]` | Escanear dispositivos cercanos |
+| `services <MAC>` | Enumerar servicios SDP |
+| `vuln <MAC> [--options JSON]` | Análisis de vulnerabilidades (13+ checks) |
+| `attack <módulo> [MAC] [--options JSON]` | Ejecutar un módulo del catálogo |
+| `auto [MAC] [--mode detect\|attack\|full]` | Autopilot de 4 fases |
+| `spam <MAC\|all> [--method M] [--rate N]` | BTSpam: inundación (3 técnicas) |
+| `list` / `info <módulo>` | Catálogo y detalle de módulos |
+| `educate [módulo]` | Modo educativo |
+| `status` | Adaptador, capacidades y backends |
+| `session list\|save\|load\|summary` | Gestión de sesiones |
+| `report [--html\|--json\|--txt] [-o FILE]` | Reporte de la sesión |
+| `config` / `plugin` / `web` / `console` | Configuración, plugins, dashboard, REPL |
+
+Opciones globales: `--config <archivo>` · `--json` (salida para scripting) · `--no-color` · `--version`.
+
+Exit codes: `0` OK · `1` error de ejecución · `2` error de uso. Cada comando incluye ayuda propia: `bluesky scan --help`.
+
+## Módulos
+
+| Módulo | Tipo | Target | Descripción |
+|--------|------|--------|-------------|
+| `scanner/device_scanner` | Escáner | BR/EDR + BLE | Descubrimiento de dispositivos |
+| `scanner/service_scanner` | Escáner | SDP | Enumeración de servicios |
+| `scanner/vuln` | Escáner | Todos | 13+ checks de vulnerabilidades |
+| `attack/knob` | Ataque | BR/EDR | Degradación de entropía (CVE-2019-9506) |
+| `attack/bias` | Ataque | BR/EDR | Suplantación de identidad (CVE-2020-10135) |
+| `attack/bluffs` | Ataque | BR/EDR | Forward/Future Secrecy |
+| `attack/blueborne` | Ataque | BR/EDR | RCE vía pila BT (CVE-2017-0781) |
+| `attack/bluefrag` | Ataque | BLE | RCE en Android (CVE-2020-15802) |
+| `attack/blesa` | Ataque | BLE | Reestablecimiento de conexión inseguro |
+| `attack/bluejacking` | Ataque | Genérico | OBEX push no solicitado |
+| `attack/bluesnarfing` | Ataque | Genérico | Extracción de datos OBEX |
+| `attack/bluebugging` | Ataque | Genérico | Inyección de comandos AT |
+| `attack/sweyntooth` | Ataque | BLE | Suite DoS/RCE (6 CVEs) |
+| `attack/whisperpair` | Ataque | BLE | Bypass de emparejamiento Fast Pair |
+| `attack/crackle` | Ataque | BLE | Crackeo TK/LTK legacy |
+| `attack/btlejack` | Ataque | BLE | Inyección y sniffing |
+| `attack/btspam` | Ataque | Genérico | Inundación (3 técnicas) |
+| `attack/autopilot` | Auxiliar | Todos | Pipeline automático de auditoría |
+| `exploit/keystroke_injection` | Exploit | HID | Inyección de teclas |
+| `exploit/l2cap_fuzz` | Exploit | L2CAP | Fuzzing de protocolo |
+| `exploit/rfcomm_shell` | Exploit | RFCOMM | Shell interactiva |
+
+`bluesky list` agrupa el catálogo por severidad y `bluesky info <módulo>` muestra CVE, hardware requerido y uso.
+
+## Modo educativo
+
+Cada módulo documenta **qué es, cómo funciona paso a paso, su impacto y cómo mitigarlo** — con foco en el defensor:
+
+```bash
 bluesky educate              # índice de contenidos
 bluesky educate knob         # KNOB (CVE-2019-9506) explicado
 
-# Desde la consola REPL
-bluesky> educate bias
-
-# Desde la web
-# Módulos → knob → sección "Modo educativo"
+bluesky> educate bias        # desde la consola REPL
 ```
 
-Cobertura: los 22 módulos del catálogo (ataques, escáneres, exploits y plugins) incluyen contenido educativo con mitigaciones accionables.
----
+También en la web: **Módulos → knob → Modo educativo**. Cobertura completa del catálogo (22 módulos).
 
-## 🛠️ Requirements
+## Web dashboard
 
-- Python 3.10+
-- BlueZ (Linux) / PyBluez (Windows/macOS)
-- `hcitool`, `gatttool`, `hcidump` (Linux)
-- Dependencies: `pip install -r requirements.txt`
+Interfaz web **minimalista en modo oscuro**, 100% offline (sin CDN ni fuentes externas), con renderizado seguro (`textContent`) y protección contra path traversal en la API de reportes.
 
----
+```bash
+bluesky web --port 5000 --open
+```
 
-## 📄 License
+![Detalle de módulo con modo educativo](docs/screenshot_module.png)
 
-**MIT License** — Free to use, modify, and distribute.
+- **Dashboard en vivo** — estado del adaptador, distribución de severidad y actividad con auto-refresh.
+- **Catálogo de módulos** — filtrado por nombre/tipo con detalle, opciones y CVEs.
+- **Escaneo en vivo** — inquiry/BLE o enumeración SDP/GATT desde el navegador.
+- **Sesiones, reportes y logs** — visores integrados con renderizado seguro.
 
----
+## Compatibilidad
+
+| Plataforma | Estado | Notas |
+|------------|--------|-------|
+| Linux (BlueZ) | ✅ Completo | `hcitool`, `gatttool`, `hcidump`; CSR dongles soportados |
+| Windows | ✅ Completo | Backend propio vía WinRT/Bleak |
+| Termux (Android) | ✅ Completo | Backend `termux-bluetooth` |
+| WSL | ⚠️ Limitado | Sin acceso USB BT directo |
+
+## Tests y calidad
+
+```bash
+python -m pytest tests/ -q     # 292 tests, 100% offline
+```
+
+CI en GitHub Actions: suite completa en cada push + lint con ruff. Cobertura de regresión en `tests/test_qa_*.py` (path traversal, XSS, concurrencia, contractos de módulos).
+
+## Estructura
+
+```text
+bluesky/
+├── bluesky/
+│   ├── core/          # motor, sesiones, hardware, reporter, educación
+│   ├── modules/       # scanners/ · attacks/ · exploits/
+│   ├── utils/         # config, backends de plataforma, formato
+│   └── web/           # dashboard Flask (app + plantillas + estáticos)
+├── plugins/           # plugins de ejemplo
+├── scripts/           # instalación (Linux/Windows/Termux), demo, build
+├── tests/             # 292 tests offline
+└── docs/              # capturas y documentación adicional
+```
+
+## Licencia
+
+[MIT](LICENSE) — libre de usar, modificar y distribuir.
 
 <div align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0066CC,100:00BFFF&height=120&section=footer&text=bluesky%20–%20Bluetooth%20Security%20Auditing%20Framework&fontSize=16&fontColor=ffffff&animation=twinkling" width="100%" />
-  <br/><br/>
-  <sub>
-    Built with ❄️ by <a href="https://github.com/Ruby570bocadito">Ruby570bocadito</a> |
-    <a href="https://github.com/Ruby570bocadito/bluesky/issues">Report Issue</a> |
-    <a href="https://github.com/Ruby570bocadito/bluesky/discussions">Discussion</a>
-  </sub>
+  <sub>Construido por <a href="https://github.com/Ruby570bocadito">Ruby570bocadito</a> · <a href="https://github.com/Ruby570bocadito/bluesky/issues">Issues</a> · <a href="https://github.com/Ruby570bocadito/bluesky/discussions">Discusiones</a></sub>
 </div>

@@ -1,29 +1,33 @@
 /* ============================================================
    bluesky Web Dashboard — diseño minimalista profesional
-   1 acento (azul), neutros slate, numerales tabulares,
-   micro-labels, 100% offline (sin CDN ni fuentes externas).
+   MODO OSCURO · 1 acento (azul), neutros slate profundo,
+   numerales tabulares, micro-labels, 100% offline
+   (sin CDN ni fuentes externas).
    ============================================================ */
 
 :root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --border: #e4e7ec;
-  --border-strong: #d0d5dd;
-  --text: #101828;
-  --muted: #667085;
-  --faint: #98a2b3;
-  --accent: #2563eb;
-  --accent-soft: #eff4ff;
-  --accent-border: #c7d7fe;
-  --ok: #12805c;
-  --ok-soft: #e6f4ee;
-  --warn: #b45309;
-  --warn-soft: #fdf3e7;
-  --danger: #b42318;
-  --danger-soft: #fdeeec;
+  color-scheme: dark;
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #21262d;
+  --border-strong: #30363d;
+  --text: #e6edf3;
+  --muted: #9198a1;
+  --faint: #6e7681;
+  --accent: #4493f8;
+  --accent-soft: #12233c;
+  --accent-border: #2a4d7f;
+  --ok: #3fb950;
+  --ok-soft: #12261a;
+  --warn: #d29922;
+  --warn-soft: #271d0c;
+  --danger: #f85149;
+  --danger-soft: #2d1512;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   --radius: 8px;
 }
+
+::selection { background: rgba(68, 147, 248, .35); }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -255,10 +259,10 @@ footer code { font-family: var(--mono); font-size: 11px; }
   flex: none;
 }
 
-.sev.critical::before { background: #d92d20; }
-.sev.high::before     { background: #f79009; }
-.sev.medium::before   { background: #f5c542; }
-.sev.low::before      { background: #98a2b3; }
+.sev.critical::before { background: #f85149; }
+.sev.high::before     { background: #db6d28; }
+.sev.medium::before   { background: #d29922; }
+.sev.low::before      { background: #6e7681; }
 
 .badge {
   display: inline-block;
@@ -306,7 +310,7 @@ td {
 
 tr:last-child td { border-bottom: none; }
 
-tbody tr:hover { background: #fafbfc; }
+tbody tr:hover { background: #1b2129; }
 
 td.num, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; }
 
@@ -357,7 +361,7 @@ input:focus, select:focus {
   transition: background .12s, border-color .12s, opacity .12s;
 }
 
-.btn:hover { background: #1d4fd7; }
+.btn:hover { background: #3a7ce0; }
 
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
@@ -399,10 +403,10 @@ input:focus, select:focus {
 
 .sevbar span { height: 100%; }
 
-.sevbar .s-critical { background: #d92d20; }
-.sevbar .s-high     { background: #f79009; }
-.sevbar .s-medium   { background: #f5c542; }
-.sevbar .s-low      { background: #cbd5e1; }
+.sevbar .s-critical { background: #f85149; }
+.sevbar .s-high     { background: #db6d28; }
+.sevbar .s-medium   { background: #d29922; }
+.sevbar .s-low      { background: #30363d; }
 
 .sev-legend {
   display: flex;
@@ -477,6 +481,14 @@ input:focus, select:focus {
   letter-spacing: -0.03em;
 }
 
+/* inputs en modo oscuro: autocompletar y pickers nativos */
+input { color-scheme: dark; }
+input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 40px var(--surface) inset;
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+}
+
 .error-page p { color: var(--muted); margin: 10px 0 22px; }
 
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -485,8 +497,8 @@ input:focus, select:focus {
   position: fixed;
   bottom: 22px;
   right: 22px;
-  background: var(--text);
-  color: #fff;
+  background: #e6edf3;
+  color: #0d1117;
   font-size: 13px;
   border-radius: 8px;
   padding: 10px 16px;

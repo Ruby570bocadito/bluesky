@@ -15,7 +15,7 @@ except FileNotFoundError:
 
 setup(
     name="bluesky",
-    version="0.3.0",
+    version="0.4.0",
     author="Ruby570bocadito",
     description="Bluetooth Security Auditing Framework for Windows, Linux & Termux",
     long_description=long_description,

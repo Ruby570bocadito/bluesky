@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
   <title>{% block title %}bluesky{% endblock %} · bluesky</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%232563eb'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%234493f8'/%3E%3C/svg%3E">
 </head>
 <body>
   <header class="topbar">
@@ -36,7 +37,7 @@
 
   <footer>
     bluesky — Bluetooth Security Auditing Framework · uso exclusivo en auditorías autorizadas ·
-    <code>v<span data-version>{{ version | default('0.2.0') }}</span></code>
+    <code>v<span data-version>{{ version | default('0.4.0') }}</span></code>
   </footer>
 
   <div class="toast" id="toast"></div>

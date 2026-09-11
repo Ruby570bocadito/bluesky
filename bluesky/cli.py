@@ -1,11 +1,29 @@
 #!/usr/bin/env python3
 """
 bluesky CLI - Bluetooth Security Auditing Framework
-Main entry point for the command-line interface.
+====================================================
+
+Interfaz de línea de comandos construida sobre argparse.
+
+Características:
+  * Subcomandos con ayuda propia (`bluesky <cmd> --help`) y uso consistente
+  * Exit codes: 0 ok · 1 error de ejecución · 2 error de uso
+  * Salida --json en scan/list/info/status para scripting y automatización
+  * --no-color y soporte de la convención NO_COLOR
+  * Sugerencias de módulos con difflib al equivocarse (attack/info)
+  * Renderizado unificado de resultados de módulos
+
+Exit codes:
+  0  operación correcta
+  1  error de ejecución (módulo falló, target no encontrado, ...)
+  2  error de uso (argumento inválido, JSON malformado, ...)
 """
 
-import sys
+import argparse
+import difflib
 import json
+import os
+import sys
 
 from bluesky import __version__, __description__
 from bluesky.console import start_console
@@ -18,1030 +36,1176 @@ from bluesky.utils.format import (
     format_device_list, format_service_list
 )
 
+# --------------------------------------------------------------- colores
+
+_NO_COLOR = False
+_JSON = False
+
+
+def _c(text: str, color: str) -> str:
+    """colorize() respetando --no-color y la variable NO_COLOR."""
+    if _NO_COLOR:
+        return text
+    return colorize(text, color)
+
+
+def _set_json_mode(enabled: bool) -> None:
+    global _JSON
+    _JSON = enabled
+
+
+def _p(text: str = "") -> None:
+    print(text)
+
+
+def _set_color_mode(no_color: bool) -> None:
+    global _NO_COLOR
+    _NO_COLOR = no_color or bool(os.environ.get("NO_COLOR"))
+
+
+def _json_out(data) -> None:
+    print(json.dumps(data, indent=2, ensure_ascii=False, default=str))
+
+
+def _suggest(name: str, candidates: list) -> str:
+    """Devuelve '¿quisiste decir X?' si hay una sugerencia cercana."""
+    matches = difflib.get_close_matches(name, candidates, n=1, cutoff=0.6)
+    if matches:
+        return f"\n  {_c('¿quisiste decir', 'dim')} {_c(matches[0], 'cyan')}{_c('?', 'dim')}"
+    return ""
+
+
+def _module_names(engine: ModuleEngine) -> list:
+    return [m.get("name", "") for m in engine.list_modules()]
+
+
+def _print_lines(value, indent: str = "  ") -> None:
+    """Imprime un bloque de texto multilínea tolerante a tipos raros."""
+    if not isinstance(value, str):
+        value = str(value)
+    for line in value.split("\n"):
+        if line.strip():
+            _p(f"{indent}{line.strip()}")
+
+
+def _section(title: str) -> None:
+    _p()
+    _p(f"  {_c(title, 'bold')}")
+
+
+# --------------------------------------------------------------- banner
 
 def print_banner():
-    """Muestra el banner de bluesky."""
-    banner = f"""
-{colorize(' ____  _     _    _ ______  _____ _  ____     __', 'cyan')}
-{colorize('|  _ \\| |   | |  | |  ____|/ ____| |/ /\\ \\   / /', 'cyan')}
-{colorize('| |_) | |   | |  | | |__  | (___ | \' /  \\ \\_/ / ', 'cyan')}
-{colorize('|  _ <| |   | |  | |  __|  \\___ \\|  <    \\   /  ', 'cyan')}
-{colorize('| |_) | |___| |__| | |____ ____) | . \\    | |   ', 'cyan')}
-{colorize('|____/|______\\____/|______|_____/|_|\\_\\   |_|   ', 'cyan')}
-{colorize(f'  v{__version__} - {__description__}', 'dim')}
-{colorize('  Auditoría Bluetooth para Termux & Linux', 'dim')}
-    """
-    print(banner)
+    """Banner compacto y profesional."""
+    _p()
+    _p(f"  {_c('bluesky', 'bold')} {_c(f'v{__version__}', 'dim')} {_c('·', 'faint')} {__description__}")
+    _p(f"  {_c('Linux · Windows · Termux — úsalo solo en auditorías autorizadas', 'dim')}")
+    _p()
 
 
 def print_help():
-    """Muestra la ayuda principal."""
-    print(f"\n{colorize('USO:', 'bold')}")
-    print("  bluesky [COMANDO] [ARGS] [OPCIONES]")
-    print()
-    print(f"{colorize('COMANDOS PRINCIPALES:', 'bold')}")
-    print(f"  {colorize('scan', 'cyan'):20} Escanear dispositivos Bluetooth cercanos")
-    print(f"  {colorize('scan --ble', 'cyan'):20} Escanear solo dispositivos BLE")
-    print(f"  {colorize('list', 'cyan'):20} Listar todos los módulos de ataque disponibles")
-    print(f"  {colorize('info <módulo>', 'cyan'):20} Ver información detallada de un módulo")
-    print(f"  {colorize('attack <módulo> <target>', 'cyan'):20} Ejecutar un ataque sobre un target")
-    print(f"  {colorize('services <target>', 'cyan'):20} Enumerar servicios SDP de un dispositivo")
-    print(f"  {colorize('status', 'cyan'):20} Ver estado del hardware Bluetooth")
-    print(f"  {colorize('console', 'cyan'):20} Consola interactiva estilo Metasploit")
-    print(f"  {colorize('report', 'cyan'):20} Generar reporte de la sesión actual")
-    print(f"  {colorize('session', 'cyan'):20} Gestionar sesiones de auditoría")
-    print(f"  {colorize('config', 'cyan'):20} Ver/editar configuración")
-    print(f"  {colorize('plugin', 'cyan'):20} Gestionar plugins")
-    print(f"  {colorize('vuln <target>', 'cyan'):20} Escanear vulnerabilidades Bluetooth")
-    print(f"  {colorize('auto [target]', 'cyan'):20} Autopilot: scan → vuln → attack → report")
-    print(f"  {colorize('spam <target>', 'cyan'):20} BTSpam: inundar dispositivo Bluetooth")
-    print(f"  {colorize('web', 'cyan'):20} Iniciar dashboard web (Flask)")
-    print(f"  {colorize('educate [módulo]', 'cyan'):20} Modo educativo: qué es, cómo funciona y cómo mitigar")
-    print()
-    print(f"  {colorize('OPCIONES GLOBALES:', 'bold')}")
-    print(f"  {colorize('--config <archivo>', 'cyan'):20} Usar archivo de configuración personalizado")
-    print()
-    print(f"{colorize('MÓDULOS DE ATAQUE:', 'bold')}")
-    engine = ModuleEngine()
-    for mod in engine.list_modules():
-        name = mod.get("name", "?")
-        desc = mod.get("description", "")[:60]
-        sev = mod.get("severity", "low")
-        sev_icon = severity_icon(sev)
-        ttype = mod.get("target_type", "both")
-        ttype_icon = target_type_icon(ttype)
-        print(f"  {sev_icon} {colorize(name, 'green'):15} {ttype_icon} {desc}")
-    print()
-    print(f"{colorize('EJEMPLOS:', 'bold')}")
-    print("  bluesky scan")
-    print("  bluesky attack bluejacking XX:XX:XX:XX:XX:XX")
-    print("  bluesky attack blueborne")
-    print("  bluesky info knob")
-    print("  bluesky services XX:XX:XX:XX:XX:XX")
-    print("  bluesky report --html report.html")
-    print("  bluesky vuln AA:BB:CC:DD:EE:FF")
-    print("  bluesky auto AA:BB:CC:DD:EE:FF")
-    print("  bluesky auto --mode detect")
-    print("  bluesky spam AA:BB:CC:DD:EE:FF")
-    print("  bluesky spam --method obex_spam --rate 20 --message 'Hola!' AA:BB:CC:DD:EE:FF")
-    print()
+    """Ayuda principal agrupada por secciones."""
+    print_banner()
+    _p(f"{_c('USO', 'bold')}")
+    _p("  bluesky <COMANDO> [OPCIONES]")
+    _p()
+    _p(f"{_c('AUDITORÍA', 'bold')}")
+    rows = [
+        ("scan", "Escanear dispositivos Bluetooth cercanos (--ble | --classic)"),
+        ("services <MAC>", "Enumerar servicios SDP de un dispositivo"),
+        ("vuln <MAC>", "Análisis de vulnerabilidades (13+ checks)"),
+        ("attack <mod> [target]", "Ejecutar un módulo de ataque"),
+        ("auto [target]", "Autopilot: scan → vuln → attack → report"),
+        ("spam <target|all>", "BTSpam: inundación Bluetooth (3 técnicas)"),
+    ]
+    for cmd, desc in rows:
+        _p(f"  {_c(cmd.ljust(24), 'cyan')} {desc}")
+    _p()
+    _p(f"{_c('CATÁLOGO Y APRENDIZAJE', 'bold')}")
+    rows = [
+        ("list", "Listar módulos del catálogo"),
+        ("info <módulo>", "Detalle de un módulo (CVE, hardware, uso)"),
+        ("educate [módulo]", "Modo educativo: qué es, cómo funciona, mitigación"),
+    ]
+    for cmd, desc in rows:
+        _p(f"  {_c(cmd.ljust(24), 'cyan')} {desc}")
+    _p()
+    _p(f"{_c('ENTORNO', 'bold')}")
+    rows = [
+        ("status", "Estado del hardware y backends Bluetooth"),
+        ("session <list|save|load|summary>", "Gestionar sesiones de auditoría"),
+        ("report", "Generar reporte de la sesión (--html | --json | --txt)"),
+        ("config", "Ver o editar la configuración"),
+        ("plugin", "Gestionar plugins"),
+    ]
+    for cmd, desc in rows:
+        _p(f"  {_c(cmd.ljust(24), 'cyan')} {desc}")
+    _p()
+    _p(f"{_c('INTERFAZ', 'bold')}")
+    rows = [
+        ("console", "Consola interactiva estilo Metasploit (REPL)"),
+        ("web", "Dashboard web (--port, --host, --open)"),
+    ]
+    for cmd, desc in rows:
+        _p(f"  {_c(cmd.ljust(24), 'cyan')} {desc}")
+    _p()
+    _p(f"{_c('OPCIONES GLOBALES', 'bold')}")
+    rows = [
+        ("--config <archivo>", "Archivo de configuración personalizado"),
+        ("--json", "Salida JSON (scan, list, info, status)"),
+        ("--no-color", "Desactivar color (respeta NO_COLOR)"),
+        ("--version", "Mostrar la versión y salir"),
+    ]
+    for flag, desc in rows:
+        _p(f"  {_c(flag.ljust(24), 'cyan')} {desc}")
+    _p()
+    _p(f"{_c('EJEMPLOS', 'bold')}")
+    for ex in [
+        "bluesky scan --ble --timeout 12",
+        "bluesky attack bluejacking AA:BB:CC:DD:EE:FF",
+        "bluesky vuln AA:BB:CC:DD:EE:FF",
+        "bluesky auto --mode detect",
+        "bluesky spam all --method obex_spam --rate 20",
+        "bluesky educate knob",
+        "bluesky --json list",
+    ]:
+        _p(f"  {_c('$', 'faint')} {ex}")
+    _p()
 
 
-def print_module_info(module_name: str):
-    """Muestra información detallada de un módulo."""
-    engine = ModuleEngine()
-    mod_cls = engine.get_module(module_name)
-
-    if not mod_cls:
-        print(f"\n{colorize('✘ Módulo no encontrado:', 'red')} '{module_name}'")
-        print(f"  Usa '{colorize('bluesky list', 'cyan')}' para ver los módulos disponibles.\n")
-        return
-
-    mod = mod_cls()
-    info = mod.get_info()
-
-    print(f"\n{separator(title=f' {info.get("name", "?")} ')}")
-    print(f"  {colorize(info.get('description', ''), 'dim')}")
-    print()
-    print(f"  {colorize('Tipo de target:', 'bold'):20} {target_type_icon(info.get('target_type', 'both'))} {info.get('target_type', 'both').upper()}")
-    print(f"  {colorize('Severidad:', 'bold'):20} {severity_icon(info.get('severity', 'low'))} {info.get('severity', 'low').title()}")
-    print(f"  {colorize('CVE:', 'bold'):20} {info.get('cve', 'N/A')}")
-    print(f"  {colorize('Requiere root:', 'bold'):20} {'✅ Sí' if info.get('requires_root') else '❌ No'}")
-    print(f"  {colorize('Hardware:', 'bold'):20} {', '.join(info.get('requires_hardware', [])) or 'Ninguno (solo BT interno)'}")
-    print(f"  {colorize('Versión:', 'bold'):20} {info.get('version', '?')}")
-    print()
-
-    # Mostrar cómo usarlo
-    print(f"  {colorize('USO:', 'bold')}")
-    print(f"    bluesky attack {info.get('name')} <MAC>")
-    print()
-
-
-def cmd_status():
-    """Muestra el estado del hardware Bluetooth."""
-    print(f"\n{separator(title=' Estado del Sistema ')}")
-    hw = HardwareDetector()
-
-    # Info del adaptador
-    adapter = hw.get_adapter_info()
-    print(f"\n  {colorize('📡 Adaptador Bluetooth', 'bold')}")
-    print(f"    {'Disponible:':15} {'✅ Sí' if adapter.get('available') else '❌ No'}")
-    if adapter.get('available'):
-        print(f"    {'Interfaz:':15} {adapter.get('interface', 'N/A')}")
-        print(f"    {'MAC:':15} {adapter.get('mac', 'N/A')}")
-        print(f"    {'Encendido:':15} {'✅ Sí' if adapter.get('powered') else '❌ No'}")
-        print(f"    {'Tipo:':15} {adapter.get('type', 'N/A')}")
-
-    # Capacidades
-    caps = hw.get_capabilities()
-    print(f"\n  {colorize('🔋 Capacidades', 'bold')}")
-    print(f"    {'BLE:':15} {'✅ Sí' if caps.get('ble_support') else '❌ No'}")
-    print(f"    {'Classic:':15} {'✅ Sí' if caps.get('classic_support') else '❌ No'}")
-    print(f"    {'Root/Admin:':15} {'✅ Sí' if caps.get('is_root') else '❌ No'}")
-    print(f"    {'Termux:':15} {'✅ Sí' if caps.get('is_termux') else '❌ No'}")
-    print(f"    {'Windows:':15} {'✅ Sí' if caps.get('is_windows') else '❌ No'}")
-    print(f"    {'WSL:':15} {'✅ Sí' if caps.get('is_wsl') else '❌ No'}")
-    print(f"    {'Bleak lib:':15} {'✅ Sí' if caps.get('bleak_available') else '❌ No'}")
-    print(f"    {'CSR Dongle:':15} {'✅ Sí' if caps.get('csr_dongle') else '❌ No'}")
-
-    # Entorno
-    from bluesky.utils.platform import get_os_name, get_available_backends
-    print(f"\n  {colorize('💻 Entorno', 'bold')}")
-    print(f"    {'Sistema:':15} {get_os_name()}")
-    print(f"    {'Python:':15} {sys.version.split()[0]}")
-    print(f"    {'Plataforma:':15} {caps.get('platform', 'unknown').title()}")
-
-    # Backends disponibles
-    backends = get_available_backends()
-    available = [k for k, v in backends.items() if v]
-    if available:
-        print(f"\n  {colorize('🔌 Backends disponibles', 'bold')}")
-        for b in available:
-            print(f"    ✅ {b}")
-    else:
-        print(f"\n  {colorize('⚠️  No hay backends Bluetooth disponibles', 'yellow')}")
-
-    # Dispositivos BT disponibles
-    bt_devices = hw.get_bluetooth_devices()
-    if bt_devices:
-        print(f"\n  {colorize('📱 Dispositivos BT Detectados', 'bold')}")
-        for dev in bt_devices:
-            mac = dev.get("mac", "N/A")
-            name = dev.get("name", "Unknown")
-            iface = dev.get("interface", "")
-            platform = dev.get("platform", "linux")
-            print(f"    {iface}: {name} ({mac}) [{platform}]")
-    else:
-        print(f"\n  {colorize('⚠️  No se detectaron adaptadores Bluetooth', 'yellow')}")
-        print("    Asegúrate de que Bluetooth esté encendido:")
-        if caps.get('is_windows'):
-            print("    Windows: Activa Bluetooth desde Configuración → Bluetooth y dispositivos")
-            print("    O usa: Settings > Bluetooth & devices > Turn Bluetooth on")
-        elif caps.get('is_termux'):
-            print("    Termux: termux-bluetooth-enable")
-        else:
-            print("    Linux:  sudo hciconfig hci0 up  o  systemctl start bluetooth")
-
-    print()
-
+# --------------------------------------------------------------- scan
 
 def cmd_scan(args: list):
-    """Ejecuta escaneo de dispositivos."""
+    """Ejecuta un escaneo de dispositivos Bluetooth."""
     from bluesky.utils.config import get_config
     from bluesky.modules.scanners.device_scanner import DeviceScanner
 
-    cfg = get_config()
-    scan_type = "all"
-    timeout = cfg.get("scanner.scan_duration", 8)
+    p = argparse.ArgumentParser(
+        prog="bluesky scan",
+        description="Escanear dispositivos Bluetooth cercanos (BR/EDR y/o BLE).",
+    )
+    p.add_argument("--ble", action="store_true", help="escanear solo dispositivos BLE")
+    p.add_argument("--classic", action="store_true", help="escanear solo Bluetooth clásico")
+    p.add_argument("--timeout", type=int, default=None, metavar="S",
+                   help="duración del escaneo en segundos (default: valor de config)")
+    p.add_argument("--json", action="store_true", help="salida JSON para scripting")
+    ns = p.parse_args(args)
 
-    if "--ble" in args:
+    scan_type = "all"
+    if ns.ble and not ns.classic:
         scan_type = "ble"
-    elif "--classic" in args:
+    elif ns.classic and not ns.ble:
         scan_type = "classic"
 
-    for i, arg in enumerate(args):
-        if arg == "--timeout" and i + 1 < len(args):
-            try:
-                timeout = int(args[i + 1])
-            except ValueError:
-                pass
+    cfg = get_config()
+    timeout = ns.timeout if ns.timeout is not None else cfg.get("scanner.scan_duration", 8)
 
-    print(f"\n{separator(title=' Escaneando... ')}")
-    print(f"  Tipo: {scan_type.upper()}  |  Timeout: {timeout}s\n")
+    if ns.json:
+        scanner = DeviceScanner(options={"type": scan_type, "timeout": str(timeout)})
+        result = scanner.run()
+        devices = result.get("data", {}).get("devices", []) if result.get("success") else []
+        _json_out({
+            "success": result.get("success", False),
+            "scan_type": scan_type,
+            "timeout": timeout,
+            "count": len(devices),
+            "devices": devices,
+        })
+        return 0 if result.get("success") else 1
+
+    _p()
+    _p(separator(title=" Escaneo "))
+    _p(f"  Tipo: {scan_type.upper()}  |  Timeout: {timeout}s")
+    _p()
 
     scanner = DeviceScanner(options={"type": scan_type, "timeout": str(timeout)})
     result = scanner.run()
 
     if result.get("success"):
         devices = result.get("data", {}).get("devices", [])
-        print(f"  {colorize(f'✅ {len(devices)} dispositivo(s) encontrado(s)', 'green')}\n")
-
+        _p(f"  {_c('OK', 'green')} {len(devices)} dispositivo(s) encontrado(s)")
+        _p()
         for i, dev in enumerate(devices, 1):
+            if not isinstance(dev, dict):
+                _p(f"  {i:2d}. {dev}")
+                continue
             name = dev.get("name", "Unknown")
             mac = dev.get("mac", "N/A")
             dev_type = dev.get("type", "?")
-            rssi = dev.get("info", {}).get("rssi", "")
-            paired = dev.get("info", {}).get("paired", False)
+            info = dev.get("info", {}) if isinstance(dev.get("info"), dict) else {}
+            rssi = info.get("rssi", "")
+            paired = info.get("paired", False)
 
-            type_icon = target_type_icon(dev_type)
-            paired_str = f" {colorize('(emparejado)', 'yellow')}" if paired else ""
+            ttype = _c(target_type_icon(dev_type), "reset")
+            paired_str = f" {_c('(emparejado)', 'yellow')}" if paired else ""
             rssi_str = f" [{rssi} dBm]" if rssi else ""
-
-            print(f"  {i:2d}. {type_icon} {colorize(name, 'cyan')} {colorize(mac, 'dim')}{rssi_str}{paired_str}")
+            _p(f"  {i:2d}. {ttype} {_c(name, 'cyan')} {_c(mac, 'dim')}{rssi_str}{paired_str}")
     else:
-        msg = result.get("data", {}).get("message", "No se encontraron dispositivos")
-        print(f"  {colorize('⚠️', 'yellow')} {msg}")
+        msg = result.get("data", {}).get("message") or result.get("error") or "No se encontraron dispositivos"
+        _p(f"  {_c('AVISO', 'yellow')} {msg}")
+    _p()
+    return 0 if result.get("success") else 1
 
-    print()
 
-
-def cmd_attack(args: list):
-    """Ejecuta un ataque."""
-    if len(args) < 1:
-        print(f"\n  {colorize('✘ Error:', 'red')} Se requiere un módulo de ataque")
-        print("  Uso: bluesky attack <módulo> [target] [--options '...']\n")
-        return
-
-    module_name = args[0]
-    target = ""
-    options = {}
-
-    # Soporte para --target <MAC> o target posicional
-    i = 1
-    while i < len(args):
-        arg = args[i]
-        if arg == "--target" and i + 1 < len(args):
-            target = args[i + 1]
-            i += 2
-        elif arg == "--options" and i + 1 < len(args):
-            try:
-                options = json.loads(args[i + 1])
-            except json.JSONDecodeError:
-                print(f"  {colorize('✘ Error:', 'red')} Opciones JSON inválidas\n")
-                return
-            i += 2
-        elif arg.startswith("--"):
-            # Ignorar otros flags
-            i += 1
-        elif not target and i < len(args):
-            # Primer argumento no-flag es el target
-            target = arg
-            i += 1
-        else:
-            i += 1
-
-    engine = ModuleEngine()
-    print(f"\n{separator(title=f' Ejecutando: {module_name} ')}")
-
-    if target:
-        print(f"  Target: {colorize(target, 'cyan')}")
-    if options:
-        print(f"  Options: {options}")
-
-    print()
-    result = engine.run_module(module_name, target=target, options=options)
-
-    if result.get("success"):
-        print(f"  {colorize('✅ Módulo ejecutado correctamente', 'green')}\n")
-    else:
-        print(f"  {colorize('⚠️  Módulo completado con notas', 'yellow')}\n")
-
-    # Mostrar resultados relevantes
-    data = result.get("data", {})
-    for key, value in data.items():
-        if key in ("message", "warning", "summary", "risk", "info"):
-            if isinstance(value, str) and len(value) > 5:
-                for line in value.split("\n"):
-                    if line.strip():
-                        print(f"  {line.strip()}")
-
-    # Mostrar vulnerabilidades encontradas
-    vulns = data.get("vulnerabilities", [])
-    if vulns:
-        print(f"\n  {colorize('📋 Vulnerabilidades detectadas:', 'bold')}")
-        for v in vulns:
-            sev = severity_icon(v.get("severity", "low"))
-            print(f"    {sev} {colorize(v.get('name', ''), 'yellow')}")
-            if v.get("cve"):
-                print(f"       CVE: {colorize(v['cve'], 'dim')}")
-            if v.get("detail"):
-                print(f"       {v['detail']}")
-
-    # Mostrar dispositivos encontrados
-    devices = data.get("devices", [])
-    if devices:
-        print(f"\n  {colorize('📱 Dispositivos:', 'bold')}")
-        print(format_device_list(devices))
-
-    # Mostrar servicios
-    services = data.get("services", [])
-    if services:
-        print(f"\n  {colorize('🔌 Servicios:', 'bold')}")
-        print(format_service_list(services))
-
-    # Mostrar dispositivos vulnerables (WhisperPair, SweynTooth)
-    vuln_devices = data.get("vulnerable_devices", [])
-    if vuln_devices:
-        print(f"\n  {colorize(f'⚠️  {len(vuln_devices)} dispositivo(s) VULNERABLE(S):', 'red')}")
-        for vd in vuln_devices:
-            print(f"    {vd.get('name', '?')} ({vd.get('mac', 'N/A')})")
-
-    # Mostrar error si existe
-    error = result.get("error")
-    if error and not result.get("success"):
-        print(f"\n  {colorize(f'✘ {error}', 'red')}")
-
-    print()
-
+# --------------------------------------------------------------- services
 
 def cmd_services(args: list):
     """Enumera servicios SDP de un dispositivo."""
-    if not args:
-        print(f"\n  {colorize('✘ Error:', 'red')} Se requiere una dirección MAC")
-        print("  Uso: bluesky services <MAC>\n")
-        return
-
-    target = args[0]
     from bluesky.modules.scanners.service_scanner import ServiceScanner
 
-    print(f"\n{separator(title=f' Servicios de {target} ')}")
-    print()
+    p = argparse.ArgumentParser(
+        prog="bluesky services",
+        description="Enumerar servicios SDP de un dispositivo Bluetooth.",
+    )
+    p.add_argument("mac", help="dirección MAC del dispositivo")
+    p.add_argument("--json", action="store_true", help="salida JSON para scripting")
+    ns = p.parse_args(args)
 
-    scanner = ServiceScanner(target=target)
+    scanner = ServiceScanner(target=ns.mac)
     result = scanner.run()
 
-    if result.get("success"):
-        services = result.get("data", {}).get("services", [])
-        print(f"  {colorize(f'✅ {len(services)} servicio(s) encontrado(s)', 'green')}\n")
+    services = result.get("data", {}).get("services", []) if result.get("success") else []
+    if ns.json:
+        _json_out({
+            "success": result.get("success", False),
+            "target": ns.mac,
+            "count": len(services),
+            "services": services,
+        })
+        return 0 if result.get("success") else 1
 
+    _p()
+    _p(separator(title=f" Servicios de {ns.mac} "))
+    if result.get("success"):
+        _p(f"  {_c('OK', 'green')} {len(services)} servicio(s) encontrado(s)")
         for svc in services:
+            if not isinstance(svc, dict):
+                _p(f"  {svc}")
+                continue
             name = svc.get("name", "Unknown")
             channel = svc.get("channel", "")
             risk = svc.get("risk", "low")
-
-            risk_icon = severity_icon(risk)
-            channel_str = f" (Canal {channel})" if channel else ""
-            print(f"  {risk_icon} {colorize(name, 'cyan')}{channel_str}")
-
+            icon = severity_icon(risk)
+            ch = f" (canal {channel})" if channel else ""
+            _p(f"  {icon} {_c(name, 'cyan')}{ch}")
             if risk == "high":
-                print(f"     {colorize('⚠️  Servicio de alto riesgo - posible superficie de ataque', 'yellow')}")
+                _p(f"     {_c('Servicio de alto riesgo: posible superficie de ataque', 'yellow')}")
     else:
         error = result.get("error", "Error desconocido")
-        print(f"  {colorize(f'✘ {error}', 'red')}")
+        _p(f"  {_c('ERROR', 'red')} {error}")
+    _p()
+    return 0 if result.get("success") else 1
 
-    print()
+
+# --------------------------------------------------------------- attack
+
+def cmd_attack(args: list):
+    """Ejecuta un módulo de ataque sobre un target."""
+    p = argparse.ArgumentParser(
+        prog="bluesky attack",
+        description="Ejecutar un módulo de ataque del catálogo.",
+        epilog="ejemplo: bluesky attack bluejacking AA:BB:CC:DD:EE:FF",
+    )
+    p.add_argument("module", help="nombre del módulo (ver 'bluesky list')")
+    p.add_argument("target", nargs="?", default="", help="MAC del target (alternativa a --target)")
+    p.add_argument("--target", dest="target_opt", metavar="MAC", help="MAC del target")
+    p.add_argument("--options", metavar="JSON", help="opciones del módulo como JSON")
+    p.add_argument("--json", action="store_true", help="salida JSON para scripting")
+    ns = p.parse_args(args)
+
+    options = {}
+    if ns.options:
+        try:
+            options = json.loads(ns.options)
+        except json.JSONDecodeError as e:
+            p.error(f"--options no es JSON válido: {e}")
+
+    engine = ModuleEngine()
+    target = ns.target_opt or ns.target
+
+    if not engine.get_module(ns.module):
+        _p()
+        _p(f"  {_c('ERROR', 'red')} Módulo no encontrado: '{ns.module}'"
+           f"{_suggest(ns.module, _module_names(engine))}")
+        _p(f"  Usa {_c('bluesky list', 'cyan')} para ver los módulos disponibles.")
+        _p()
+        return 2
+
+    if not ns.json:
+        _p()
+        _p(separator(title=f" Ejecutando: {ns.module} "))
+        if target:
+            _p(f"  Target: {_c(target, 'cyan')}")
+        if options:
+            _p(f"  Opciones: {options}")
+        _p()
+
+    result = engine.run_module(ns.module, target=target, options=options)
+    data = result.get("data", {}) if isinstance(result.get("data"), dict) else {}
+
+    if ns.json:
+        _json_out(result)
+        return 0 if result.get("success") else 1
+
+    if result.get("success"):
+        _p(f"  {_c('OK', 'green')} Módulo ejecutado correctamente")
+    else:
+        _p(f"  {_c('AVISO', 'yellow')} Módulo completado con notas")
+
+    for key in ("message", "warning", "summary", "risk", "info"):
+        value = data.get(key)
+        if isinstance(value, str) and len(value) > 5:
+            _section(key.capitalize())
+            _print_lines(value)
+
+    vulns = data.get("vulnerabilities") or []
+    if vulns:
+        _section("Vulnerabilidades detectadas")
+        for v in vulns:
+            if not isinstance(v, dict):
+                _p(f"    {v}")
+                continue
+            _p(f"    {severity_icon(v.get('severity', 'low'))} {_c(v.get('name', ''), 'yellow')}")
+            if v.get("cve"):
+                _p(f"       CVE: {_c(v['cve'], 'dim')}")
+            if v.get("detail"):
+                _p(f"       {v['detail']}")
+
+    devices = data.get("devices") or []
+    if devices:
+        _section("Dispositivos")
+        _p(format_device_list(devices))
+
+    services = data.get("services") or []
+    if services:
+        _section("Servicios")
+        _p(format_service_list(services))
+
+    vuln_devices = data.get("vulnerable_devices") or []
+    if vuln_devices:
+        _section(f"{len(vuln_devices)} dispositivo(s) VULNERABLE(S)")
+        for vd in vuln_devices:
+            if isinstance(vd, dict):
+                _p(f"    {_c('!', 'red')} {vd.get('name', '?')} ({vd.get('mac', 'N/A')})")
+
+    error = result.get("error")
+    if error and not result.get("success"):
+        _p()
+        _p(f"  {_c('ERROR', 'red')} {error}")
+    _p()
+    return 0 if result.get("success") else 1
 
 
-def cmd_list():
-    """Lista todos los módulos disponibles."""
+# --------------------------------------------------------------- list / info
+
+def cmd_list(args: list):
+    """Lista los módulos del catálogo."""
+    p = argparse.ArgumentParser(
+        prog="bluesky list",
+        description="Listar los módulos del catálogo (escáneres, ataques y exploits).",
+    )
+    p.add_argument("--json", action="store_true", help="salida JSON para scripting")
+    ns = p.parse_args(args)
+
     engine = ModuleEngine()
     modules = engine.list_modules()
 
-    print(f"\n{separator(title=' Módulos Disponibles ')}")
-    print(f"\n  {colorize(f'{len(modules)} módulo(s) cargado(s)', 'bold')}\n")
+    if ns.json:
+        _json_out({"count": len(modules), "modules": modules})
+        return 0
 
-    # Agrupar por severidad
+    _p()
+    _p(separator(title=" Módulos "))
+    _p(f"  {_c(f'{len(modules)} módulo(s) cargado(s)', 'bold')}")
+    _p()
+
     by_severity = {}
     for m in modules:
-        sev = m.get("severity", "low")
-        if sev not in by_severity:
-            by_severity[sev] = []
-        by_severity[sev].append(m)
+        by_severity.setdefault(m.get("severity", "low"), []).append(m)
 
-    for severity in ["critical", "high", "medium", "low"]:
-        if severity in by_severity:
-            print(f"  {severity_icon(severity)} {colorize(severity.upper(), 'bold')}")
-            for m in by_severity[severity]:
-                name = m.get("name", "?")
-                desc = m.get("description", "")[:70]
-                ttype = m.get("target_type", "both")
-                ttype_icon = target_type_icon(ttype)
-                cve = m.get("cve", "")
-                cve_str = f" [{cve}]" if cve else ""
-                print(f"    {ttype_icon} {colorize(name, 'green'):18} {desc}{colorize(cve_str, 'dim')}")
-            print()
+    for severity in ("critical", "high", "medium", "low"):
+        if severity not in by_severity:
+            continue
+        _p(f"  {severity_icon(severity)} {_c(severity.upper(), 'bold')}")
+        for m in by_severity[severity]:
+            name = str(m.get("name", "?"))
+            desc = str(m.get("description", ""))[:66]
+            ttype = _c(target_type_icon(m.get("target_type", "both")), "reset")
+            cve = m.get("cve", "")
+            cve_str = f" [{cve}]" if cve else ""
+            _p(f"    {ttype} {_c(name.ljust(18), 'green')} {desc}{_c(cve_str, 'dim')}")
+        _p()
 
-    print(f"  {colorize('💡 Tip:', 'dim')} Usa '{colorize('bluesky info <módulo>', 'cyan')}' para más detalles\n")
+    _p(f"  {_c('Tip:', 'dim')} {_c('bluesky info <módulo>', 'cyan')} {_c('para más detalles', 'dim')}")
+    _p()
+    return 0
 
+
+def print_module_info(module_name: str, as_json: bool = False):
+    """Muestra información detallada de un módulo."""
+    engine = ModuleEngine()
+    mod_cls = engine.get_module(module_name)
+
+    if not mod_cls:
+        _p()
+        _p(f"  {_c('ERROR', 'red')} Módulo no encontrado: '{module_name}'"
+           f"{_suggest(module_name, _module_names(engine))}")
+        _p(f"  Usa {_c('bluesky list', 'cyan')} para ver los módulos disponibles.")
+        _p()
+        return 2
+
+    info = mod_cls().get_info()
+    payload = {
+        "name": info.get("name", module_name),
+        "description": info.get("description", ""),
+        "target_type": info.get("target_type", "both"),
+        "severity": info.get("severity", "low"),
+        "cve": info.get("cve"),
+        "requires_root": bool(info.get("requires_root")),
+        "requires_hardware": info.get("requires_hardware", []),
+        "version": info.get("version", "?"),
+        "usage": f"bluesky attack {info.get('name', module_name)} <MAC>",
+    }
+    if as_json:
+        _json_out(payload)
+        return 0
+
+    _p()
+    _p(separator(title=f" {payload['name']} "))
+    _p(f"  {_c(payload['description'], 'dim')}")
+    _p()
+    rows = [
+        ("Tipo de target", f"{target_type_icon(payload['target_type'])} {payload['target_type'].upper()}"),
+        ("Severidad", f"{severity_icon(payload['severity'])} {payload['severity'].title()}"),
+        ("CVE", payload["cve"] or "N/A"),
+        ("Requiere root", "sí" if payload["requires_root"] else "no"),
+        ("Hardware", ", ".join(payload["requires_hardware"]) or "ninguno (solo adaptador interno)"),
+        ("Versión", payload["version"]),
+    ]
+    for k, v in rows:
+        _p(f"  {_c(k.ljust(18), 'dim')} {v}")
+    _p()
+    _p(f"  {_c('USO', 'bold')}")
+    _p(f"    {_c(payload['usage'], 'cyan')}")
+    _p()
+    return 0
+
+
+# --------------------------------------------------------------- vuln
+
+def cmd_vuln(args: list):
+    """Ejecuta VulnScanner: análisis de vulnerabilidades Bluetooth."""
+    p = argparse.ArgumentParser(
+        prog="bluesky vuln",
+        description="Análisis de vulnerabilidades Bluetooth contra 13+ checks conocidos "
+                    "(KNOB, BIAS, BLUFFS, BlueBorne, BlueFrag, SweynTooth, ...).",
+        epilog="ejemplo: bluesky vuln AA:BB:CC:DD:EE:FF --options '{\"SCAN_TYPE\": \"quick\"}'",
+    )
+    p.add_argument("mac", help="dirección MAC del dispositivo")
+    p.add_argument("--options", metavar="JSON", help="opciones del escáner como JSON")
+    p.add_argument("--json", action="store_true", help="salida JSON para scripting")
+    ns = p.parse_args(args)
+
+    options = {}
+    if ns.options:
+        try:
+            options = json.loads(ns.options)
+        except json.JSONDecodeError as e:
+            p.error(f"--options no es JSON válido: {e}")
+
+    engine = ModuleEngine()
+
+    if not ns.json:
+        _p()
+        _p(separator(title=" VulnScanner "))
+        _p(f"  Target: {_c(ns.mac, 'cyan')}")
+        if options:
+            _p(f"  Opciones: {options}")
+        _p()
+
+    result = engine.run_module("vuln", target=ns.mac, options=options)
+    data = result.get("data", {}) if isinstance(result.get("data"), dict) else {}
+
+    if ns.json:
+        _json_out(result)
+        return 0 if result.get("success") else 1
+
+    _p(f"  {_c('OK', 'green') if result.get('success') else _c('AVISO', 'yellow')} "
+       f"Análisis {'completado' if result.get('success') else 'completado con notas'}")
+
+    dev_info = data.get("device_info", {})
+    if isinstance(dev_info, dict) and dev_info:
+        _section("Dispositivo")
+        _p(f"    Nombre:      {dev_info.get('name', 'Unknown')}")
+        _p(f"    MAC:         {dev_info.get('mac', 'N/A')}")
+        _p(f"    Clase:       {dev_info.get('class', 'Unknown')}")
+        _p(f"    Fabricante:  {dev_info.get('manufacturer', 'Unknown')}")
+
+    vulns = data.get("vulnerabilities") or []
+    found = [v for v in vulns if isinstance(v, dict) and v.get("vulnerable", False)]
+    if found:
+        _section("Vulnerabilidades encontradas")
+        for v in found:
+            sev_color = "red" if v.get("severity") == "critical" else "yellow"
+            _p(f"    {severity_icon(v.get('severity', 'low'))} "
+               f"{_c(str(v.get('id', '?')).ljust(18), sev_color)} {str(v.get('name', ''))[:60]}")
+            if v.get("cve"):
+                _p(f"       CVE: {_c(v['cve'], 'dim')}")
+            if v.get("evidence"):
+                _p(f"       → {str(v['evidence'])[:80]}")
+            if v.get("module"):
+                hint = f"bluesky attack {v['module']} {ns.mac}"
+                _p(f"       {_c(hint, 'cyan')}")
+            _p()
+
+    summary = data.get("summary")
+    if summary and not found:
+        _section("Resumen")
+        _print_lines(summary)
+
+    recs = data.get("recommendations") or []
+    if recs:
+        _section("Recomendaciones")
+        for r in recs:
+            _p(f"    {r}")
+        _p()
+
+    stats = data.get("stats", {})
+    if isinstance(stats, dict) and stats:
+        _section("Estadísticas")
+        _p(f"    Checks: {stats.get('total_checks', 0)}  |  "
+           f"Vulnerables: {stats.get('vulnerable', 0)}  |  "
+           f"Críticas: {stats.get('critical', 0)}  |  "
+           f"Altas: {stats.get('high', 0)}")
+        _p()
+
+    error = result.get("error")
+    if error and not result.get("success"):
+        _p(f"  {_c('ERROR', 'red')} {error}")
+    _p()
+    return 0 if result.get("success") else 1
+
+
+# --------------------------------------------------------------- auto
+
+def cmd_auto(args: list):
+    """Ejecuta Autopilot: scan → vuln → attack → report."""
+    p = argparse.ArgumentParser(
+        prog="bluesky auto",
+        description="Autopilot: pipeline automatizado escaneo → vulnerabilidades → "
+                    "ataques → reporte.",
+    )
+    p.add_argument("target", nargs="?", default="", help="MAC concreta (opcional: por defecto escanea)")
+    p.add_argument("--mode", choices=("detect", "attack", "full"), default="full",
+                   help="modo de operación (default: full)")
+    p.add_argument("--chain", metavar="CSV", help="cadena personalizada: mod1,mod2,mod3")
+    p.add_argument("--timeout", type=int, metavar="S", help="timeout por módulo (default: 30)")
+    p.add_argument("--json", action="store_true", help="salida JSON para scripting")
+    ns = p.parse_args(args)
+
+    options = {"MODE": ns.mode}
+    if ns.chain:
+        options["CHAIN"] = ns.chain
+    if ns.timeout is not None:
+        options["TIMEOUT"] = str(ns.timeout)
+
+    engine = ModuleEngine()
+
+    if not ns.json:
+        _p()
+        _p(separator(title=f" Autopilot — modo {ns.mode.upper()} "))
+        if ns.target:
+            _p(f"  Target: {_c(ns.target, 'cyan')}")
+        _p()
+
+    result = engine.run_module("autopilot", target=ns.target, options=options)
+    data = result.get("data", {}) if isinstance(result.get("data"), dict) else {}
+
+    if ns.json:
+        _json_out(result)
+        return 0 if result.get("success") else 1
+
+    summary = data.get("summary", "")
+    if summary:
+        _print_lines(summary)
+
+    stats = data.get("stats", {})
+    if isinstance(stats, dict) and stats:
+        _section("Estadísticas finales")
+        _p(f"    Targets:           {stats.get('targets', 0)}")
+        _p(f"    Ataques:           {stats.get('attacks_total', 0)}")
+        _p(f"    Exitosos:          {stats.get('attacks_successful', 0)}")
+        _p(f"    Vulns encontradas: {stats.get('vulnerabilities_found', 0)}")
+        _p()
+
+    report_path = data.get("report_path")
+    if report_path:
+        _p(f"  {_c('Reporte:', 'dim')} {_c(str(report_path), 'green')}")
+
+    error = result.get("error")
+    if error and not result.get("success"):
+        _p(f"  {_c('ERROR', 'red')} {error}")
+    _p()
+    return 0 if result.get("success") else 1
+
+
+# --------------------------------------------------------------- spam
+
+def cmd_spam(args: list):
+    """Ejecuta BTSpam contra un target o contra todos los dispositivos."""
+    p = argparse.ArgumentParser(
+        prog="bluesky spam",
+        description="BTSpam: inundación Bluetooth con solicitudes de emparejamiento, "
+                    "mensajes OBEX Push y conexiones RFCOMM.",
+        epilog="usa 'bluesky spam all' para escanear y atacar todos los dispositivos",
+    )
+    p.add_argument("target", help="MAC del dispositivo o 'all' para atacar a todos")
+    p.add_argument("--method", choices=("all", "pairing_flood", "obex_spam", "connection_flood"),
+                   default="all", help="técnica de spam (default: all)")
+    p.add_argument("--rate", type=int, default=10, metavar="N",
+                   help="paquetes por segundo, 1-100 (default: 10)")
+    p.add_argument("--count", type=int, default=50, metavar="N",
+                   help="número de iteraciones, 0=infinito (default: 50)")
+    p.add_argument("--duration", type=int, default=30, metavar="S",
+                   help="duración máxima en segundos (default: 30)")
+    p.add_argument("--delay", type=int, default=100, metavar="MS",
+                   help="delay entre ráfagas en ms (default: 100)")
+    p.add_argument("--message", default="👽 bluesky Spam!", metavar="TXT",
+                   help="mensaje para OBEX Push")
+    p.add_argument("--json", action="store_true", help="salida JSON para scripting")
+    ns = p.parse_args(args)
+
+    if not 1 <= ns.rate <= 100:
+        p.error("--rate debe estar entre 1 y 100")
+    if ns.count < 0:
+        p.error("--count no puede ser negativo")
+
+    options = {
+        "METHOD": ns.method,
+        "RATE": str(ns.rate),
+        "COUNT": str(ns.count),
+        "DURATION": str(ns.duration),
+        "DELAY": str(ns.delay),
+        "MESSAGE": ns.message,
+    }
+
+    engine = ModuleEngine()
+
+    if not ns.json:
+        _p()
+        title = " BTSpam — todos los dispositivos " if ns.target == "all" else " BTSpam "
+        _p(separator(title=title))
+        if ns.target == "all":
+            _p(f"  {_c('Paso 1-2:', 'dim')} escaneando dispositivos Bluetooth...")
+        else:
+            _p(f"  Target: {_c(ns.target, 'cyan')}")
+        _p(f"  {_c('Técnica:', 'dim')} {ns.method}  {_c('Rate:', 'dim')} {ns.rate}/s")
+        _p()
+
+    result = engine.run_module("btspam", target=ns.target, options=options)
+    data = result.get("data", {}) if isinstance(result.get("data"), dict) else {}
+
+    if ns.json:
+        _json_out(result)
+        return 0 if result.get("success") else 1
+
+    _p(f"  {_c('OK', 'green') if result.get('success') else _c('AVISO', 'yellow')} "
+       f"BTSpam {'ejecutado correctamente' if result.get('success') else 'completado con notas'}")
+
+    for key in ("message", "warning", "summary"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            _section(key.capitalize())
+            _print_lines(value)
+
+    devices = data.get("devices") or data.get("devices_found") or []
+    if devices:
+        _section("Dispositivos")
+        for d in devices:
+            if isinstance(d, dict):
+                _p(f"    {_c(d.get('mac', '?'), 'cyan')} - {_c(d.get('name', 'Unknown'), 'dim')}")
+
+    hit_detail = data.get("targets_hit_detail") or []
+    if hit_detail:
+        _section("Dispositivos impactados")
+        for d in hit_detail:
+            if isinstance(d, dict):
+                _p(f"    {_c('OK', 'green')} {_c(d.get('mac', '?'), 'green')} - {d.get('name', '?')}")
+
+    stats = data.get("stats", {})
+    if isinstance(stats, dict) and stats:
+        _section("Estadísticas")
+        for k, v in stats.items():
+            if k == "targets_hit":
+                continue
+            _p(f"    {k}: {v}")
+        targets = stats.get("targets_hit") or []
+        if targets:
+            _p(f"    targets_hit: {', '.join(list(targets)[:5])}")
+
+    error = result.get("error")
+    if error and not result.get("success"):
+        _p(f"  {_c('ERROR', 'red')} {error}")
+    _p()
+    return 0 if result.get("success") else 1
+
+
+# --------------------------------------------------------------- status
+
+def cmd_status(args: list):
+    """Muestra el estado del hardware Bluetooth."""
+    p = argparse.ArgumentParser(
+        prog="bluesky status",
+        description="Estado del adaptador, capacidades, entorno y backends Bluetooth.",
+    )
+    p.add_argument("--json", action="store_true", help="salida JSON para scripting")
+    ns = p.parse_args(args)
+
+    hw = HardwareDetector()
+    adapter = hw.get_adapter_info()
+    caps = hw.get_capabilities()
+    bt_devices = hw.get_bluetooth_devices()
+    from bluesky.utils.platform import get_os_name, get_available_backends
+    backends = get_available_backends()
+    available_backends = [k for k, v in backends.items() if v]
+
+    if ns.json:
+        _json_out({
+            "adapter": adapter,
+            "capabilities": caps,
+            "devices": bt_devices,
+            "os": get_os_name(),
+            "python": sys.version.split()[0],
+            "backends": available_backends,
+        })
+        return 0
+
+    _p()
+    _p(separator(title=" Estado del sistema "))
+
+    _section("Adaptador Bluetooth")
+    ok = adapter.get("available")
+    _p(f"    {'Disponible:':14} {_c('sí', 'green') if ok else _c('no', 'red')}")
+    if ok:
+        _p(f"    {'Interfaz:':14} {adapter.get('interface', 'N/A')}")
+        _p(f"    {'MAC:':14} {adapter.get('mac', 'N/A')}")
+        _p(f"    {'Encendido:':14} {_c('sí', 'green') if adapter.get('powered') else _c('no', 'red')}")
+        _p(f"    {'Tipo:':14} {adapter.get('type', 'N/A')}")
+
+    _section("Capacidades")
+    cap_rows = [
+        ("BLE", "ble_support"), ("Classic", "classic_support"),
+        ("Root/Admin", "is_root"), ("Termux", "is_termux"),
+        ("Windows", "is_windows"), ("WSL", "is_wsl"),
+        ("Bleak lib", "bleak_available"), ("CSR Dongle", "csr_dongle"),
+    ]
+    for label, key in cap_rows:
+        val = caps.get(key)
+        _p(f"    {label + ':':14} {_c('sí', 'green') if val else _c('no', 'dim')}")
+
+    _section("Entorno")
+    _p(f"    {'Sistema:':14} {get_os_name()}")
+    _p(f"    {'Python:':14} {sys.version.split()[0]}")
+    _p(f"    {'Plataforma:':14} {caps.get('platform', 'unknown').title()}")
+
+    _section("Backends")
+    if available_backends:
+        for b in available_backends:
+            _p(f"    {_c('sí', 'green')} {b}")
+    else:
+        _p(f"    {_c('sin backends Bluetooth disponibles', 'yellow')}")
+
+    if bt_devices:
+        _section("Adaptadores detectados")
+        for dev in bt_devices:
+            if isinstance(dev, dict):
+                _p(f"    {dev.get('interface', '')}: {dev.get('name', 'Unknown')} "
+                   f"({dev.get('mac', 'N/A')}) [{dev.get('platform', 'linux')}]")
+    else:
+        _p()
+        _p(f"  {_c('No se detectaron adaptadores Bluetooth', 'yellow')}")
+        _p("    Asegúrate de que Bluetooth esté encendido:")
+        if caps.get("is_windows"):
+            _p("    Windows: Configuración → Bluetooth y dispositivos → Activar")
+        elif caps.get("is_termux"):
+            _p("    Termux: termux-bluetooth-enable")
+        else:
+            _p("    Linux:   sudo hciconfig hci0 up  ·  systemctl start bluetooth")
+
+    _p()
+    return 0
+
+
+# --------------------------------------------------------------- report
 
 def cmd_report(args: list):
-    """Genera reporte de la sesión actual."""
+    """Genera un reporte de la sesión actual."""
+    p = argparse.ArgumentParser(
+        prog="bluesky report",
+        description="Generar reporte de la sesión de auditoría actual.",
+    )
+    fmt = p.add_mutually_exclusive_group()
+    fmt.add_argument("--html", action="store_true", help="reporte HTML")
+    fmt.add_argument("--json", action="store_true", help="reporte JSON")
+    fmt.add_argument("--txt", action="store_true", help="reporte texto (default)")
+    p.add_argument("-o", "--output", metavar="FILE", help="archivo de salida")
+    ns = p.parse_args(args)
+
     from bluesky.utils.config import get_config
     cfg = get_config()
-    fmt = cfg.get("general.report_format", "txt")
-    output_file = ""
+    report_fmt = cfg.get("general.report_format", "txt")
+    if ns.html:
+        report_fmt = "html"
+    elif ns.json:
+        report_fmt = "json"
 
-    for i, arg in enumerate(args):
-        if arg == "--html":
-            fmt = "html"
-        elif arg == "--json":
-            fmt = "json"
-        elif arg == "--txt":
-            fmt = "txt"
-        elif arg.startswith("--output") and i + 1 < len(args):
-            output_file = args[i + 1]
-        elif not arg.startswith("--"):
-            output_file = arg
-
-    # Cargar sesión actual o crear una por defecto
     session = Session()
     if not session.load():
-        # Crear sesión en memoria con datos de prueba
+        import datetime
         session.name = "default"
         session.targets = []
         session.results = []
-        session.created_at = __import__('datetime').datetime.now().isoformat()
-        print(f"\n  {colorize('📋 Creando sesión por defecto...', 'dim')}")
+        session.created_at = datetime.datetime.now().isoformat()
+        _p(f"  {_c('Creando sesión por defecto...', 'dim')}")
 
     summary = session.summary()
     reporter = Reporter(summary)
 
+    output_file = ns.output
     if not output_file:
-        if fmt == "html":
-            output_file = f"bluesky_report_{session.name}.html"
-        elif fmt == "json":
-            output_file = f"bluesky_report_{session.name}.json"
-        else:
-            output_file = f"bluesky_report_{session.name}.txt"
+        output_file = f"bluesky_report_{session.name}.{report_fmt}"
 
-    print(f"\n{separator(title=' Generando Reporte ')}")
-    print(f"  Formato: {fmt.upper()}")
-    print(f"  Sesión:  {session.name}")
-    print(f"  Archivo: {output_file}\n")
+    _p()
+    _p(separator(title=" Reporte "))
+    _p(f"  Formato: {report_fmt.upper()}")
+    _p(f"  Sesión:  {session.name}")
+    _p(f"  Archivo: {output_file}")
+    _p()
 
-    if fmt == "html":
+    if report_fmt == "html":
         reporter.to_html(output_file)
-    elif fmt == "json":
+    elif report_fmt == "json":
         reporter.to_json(output_file)
     else:
         report_text = reporter.to_txt(output_file)
-        # Mostrar preview
-        lines = report_text.split("\n")
-        for line in lines[:20]:
-            print(f"  {line}")
+        for line in report_text.split("\n")[:20]:
+            _p(f"  {line}")
 
-    print(f"\n  {colorize(f'✅ Reporte guardado: {output_file}', 'green')}\n")
+    _p()
+    _p(f"  {_c('OK', 'green')} Reporte guardado: {output_file}")
+    _p()
+    return 0
 
+
+# --------------------------------------------------------------- session
 
 def cmd_session(args: list):
     """Gestiona sesiones de auditoría."""
-    if not args:
-        print(f"\n  {colorize('USO:', 'bold')}")
-        print("    bluesky session save <nombre>   Guardar sesión actual")
-        print("    bluesky session load <nombre>   Cargar sesión")
-        print("    bluesky session list            Listar sesiones")
-        print("    bluesky session summary         Resumen de sesión actual\n")
-        return
+    p = argparse.ArgumentParser(
+        prog="bluesky session",
+        description="Gestionar sesiones de auditoría.",
+    )
+    sub = p.add_subparsers(dest="action")
+    sub.add_parser("list", help="listar sesiones guardadas")
+    sp_save = sub.add_parser("save", help="guardar sesión actual")
+    sp_save.add_argument("name")
+    sp_load = sub.add_parser("load", help="cargar una sesión")
+    sp_load.add_argument("name")
+    sub.add_parser("summary", help="resumen de la sesión actual")
+    ns = p.parse_args(args)
 
-    action = args[0]
     session = Session()
 
-    if action == "list":
+    if ns.action in (None, "list"):
         sessions = Session.list_sessions()
         if sessions:
-            print(f"\n  {colorize('Sesiones guardadas:', 'bold')}")
+            _p()
+            _p(f"  {_c('Sesiones guardadas:', 'bold')}")
             for s in sessions:
-                print(f"    📁 {s}")
+                _p(f"    {_c('·', 'faint')} {s}")
+            _p()
         else:
-            print(f"\n  {colorize('No hay sesiones guardadas', 'yellow')}\n")
+            _p()
+            _p(f"  {_c('No hay sesiones guardadas', 'yellow')}")
+            _p(f"  Crea una con {_c('bluesky session save <nombre>', 'cyan')}")
+            _p()
+        return 0
 
-    elif action == "save" and len(args) >= 2:
-        session.name = args[1]
+    if ns.action == "save":
+        session.name = ns.name
         session._save()
-        print(f"\n  {colorize(f'✅ Sesión guardada: {args[1]}', 'green')}\n")
+        _p()
+        _p(f"  {_c('OK', 'green')} Sesión guardada: {ns.name}")
+        _p()
+        return 0
 
-    elif action == "load" and len(args) >= 2:
-        if session.load(args[1]):
+    if ns.action == "load":
+        if session.load(ns.name):
             summary = session.summary()
-            print(f"\n  {colorize(f'✅ Sesión cargada: {args[1]}', 'green')}")
-            print(f"  Targets: {summary.get('total_targets', 0)}")
-            print(f"  Resultados: {summary.get('total_results', 0)}")
-            print(f"  Exitosos: {summary.get('successful_attacks', 0)}")
-            print()
-        else:
-            print(f"\n  {colorize(f'✘ Sesión no encontrada: {args[1]}', 'red')}\n")
+            _p()
+            _p(f"  {_c('OK', 'green')} Sesión cargada: {ns.name}")
+            _p(f"  Targets: {summary.get('total_targets', 0)}")
+            _p(f"  Resultados: {summary.get('total_results', 0)}")
+            _p(f"  Exitosos: {summary.get('successful_attacks', 0)}")
+            _p()
+            return 0
+        _p()
+        _p(f"  {_c('ERROR', 'red')} Sesión no encontrada: {ns.name}")
+        _p()
+        return 1
 
-    elif action == "summary":
-        if session.load():
-            summary = session.summary()
-            print(f"\n{separator(title=f' Sesión: {session.name} ')}")
-            print(f"  Creada:  {summary.get('created_at', 'N/A')[:19]}")
-            print(f"  Targets: {summary.get('total_targets', 0)}")
-            print(f"  Tests:   {summary.get('total_results', 0)}")
-            print(f"  Éxitos:  {summary.get('successful_attacks', 0)}")
-            print(f"  Fallos:  {summary.get('failed_attacks', 0)}")
-            print()
-        else:
-            print(f"\n  {colorize('⚠️  No hay sesión activa', 'yellow')}")
-            print("  Usa 'bluesky session save <nombre>' para crear una.\n")
+    # summary
+    if session.load():
+        summary = session.summary()
+        _p()
+        _p(separator(title=f" Sesión: {session.name} "))
+        created = str(summary.get("created_at", "N/A"))
+        _p(f"  Creada:  {created[:19]}")
+        _p(f"  Targets: {summary.get('total_targets', 0)}")
+        _p(f"  Tests:   {summary.get('total_results', 0)}")
+        _p(f"  Éxitos:  {summary.get('successful_attacks', 0)}")
+        _p(f"  Fallos:  {summary.get('failed_attacks', 0)}")
+        _p()
+        return 0
+    _p()
+    _p(f"  {_c('No hay sesión activa', 'yellow')}")
+    _p(f"  Usa {_c('bluesky session save <nombre>', 'cyan')} para crear una.")
+    _p()
+    return 1
 
+
+# --------------------------------------------------------------- config
 
 def cmd_config(args: list):
     """Gestiona la configuración de bluesky."""
-    from bluesky.utils.config import get_config, parse_key_value
+    p = argparse.ArgumentParser(
+        prog="bluesky config",
+        description="Ver o editar la configuración de bluesky.",
+    )
+    sub = p.add_subparsers(dest="action")
+    sub.add_parser("show", help="mostrar la configuración (acción por defecto)")
+    sp_set = sub.add_parser("set", help="cambiar un valor (CLAVE=VALOR)")
+    sp_set.add_argument("key_value", metavar="CLAVE=VALOR", help="ej: general.timeout=60")
+    sub.add_parser("save", help="persistir los cambios")
+    sub.add_parser("reset", help="restaurar los valores por defecto")
+    sp_fav = sub.add_parser("favorite", help="gestionar dispositivos favoritos")
+    fav_sub = sp_fav.add_subparsers(dest="fav_action")
+    fav_add = fav_sub.add_parser("add", help="añadir favorito")
+    fav_add.add_argument("address", help="dirección MAC")
+    fav_add.add_argument("name", nargs="?", default="", help="nombre opcional")
+    fav_add.add_argument("type", nargs="?", default="auto", help="tipo: auto|classic|ble")
+    fav_rm = fav_sub.add_parser("remove", help="eliminar favorito")
+    fav_rm.add_argument("address", help="dirección MAC")
+    ns = p.parse_args(args)
 
+    from bluesky.utils.config import get_config, parse_key_value
     cfg = get_config()
 
-    if not args:
-        # Mostrar configuración actual
-        print(f"\n{separator(title=' Configuración ')}")
-        print(f"  Archivo: {colorize(str(cfg._path or '(defaults)'), 'dim')}")
-        print(f"  Modificado: {colorize('✅ Sí' if cfg.is_dirty() else '❌ No', 'dim')}")
-        print()
-        all_cfg = cfg.get_all()
+    if ns.action in (None, "show"):
+        _p()
+        _p(separator(title=" Configuración "))
+        _p(f"  Archivo: {_c(str(cfg._path or '(defaults)'), 'dim')}")
+        _p(f"  Modificado: {_c('sí' if cfg.is_dirty() else 'no', 'dim')}")
+        _p()
 
-        def _print_section(name: str, data: dict, indent: int = 2):
+        def _print_section(data, indent: int = 2):
             for key, value in data.items():
                 if isinstance(value, dict):
-                    print(f"  {' ' * indent}{colorize(f'[{key}]', 'bold')}")
-                    _print_section(f"{name}.{key}", value, indent + 2)
+                    _p(f"  {' ' * indent}{_c(f'[{key}]', 'bold')}")
+                    _print_section(value, indent + 2)
                 elif isinstance(value, list):
                     if value:
-                        print(f"  {' ' * indent}{key}:")
+                        _p(f"  {' ' * indent}{key}:")
                         for item in value:
-                            print(f"  {' ' * (indent + 2)}- {item}")
+                            _p(f"  {' ' * (indent + 2)}- {item}")
                     else:
-                        print(f"  {' ' * indent}{key}: []")
+                        _p(f"  {' ' * indent}{key}: []")
                 else:
-                    colored_val = colorize(str(value), 'cyan') if value else colorize(str(value), 'dim')
-                    print(f"  {' ' * indent}{key}: {colored_val}")
+                    colored = _c(str(value), "cyan") if value else _c(str(value), "dim")
+                    _p(f"  {' ' * indent}{key}: {colored}")
 
-        _print_section("", all_cfg)
+        _print_section(cfg.get_all())
+        _p()
+        _p(f"  {_c('Tip:', 'dim')} {_c('bluesky config set <clave>=<valor>', 'cyan')}"
+           f" {_c('para cambiar valores', 'dim')}")
+        _p(f"  {_c('Tip:', 'dim')} {_c('bluesky config save', 'cyan')}"
+           f" {_c('para persistir cambios', 'dim')}")
+        _p()
+        return 0
 
-        print(f"\n  {colorize('💡 Tip:', 'dim')} Usa 'bluesky config set <clave>=<valor>' para cambiar valores")
-        print(f"  {colorize('💡 Tip:', 'dim')} Usa 'bluesky config save' para persistir cambios")
-        print()
-        return
-
-    action = args[0]
-
-    if action == "set" and len(args) >= 2:
+    if ns.action == "set":
         try:
-            key, value = parse_key_value(args[1])
-            old = cfg.get(key)
-            cfg.set(key, value)
-            print(f"\n  {colorize('✅ Config actualizada:', 'green')} {key} = {value}")
-            print(f"    {'(anterior: ' + str(old) + ')' if old is not None else ''}")
-            print(f"  {colorize('⚠️', 'yellow')} Cambios no guardados. Usa 'bluesky config save' para persistir.\n")
+            key, value = parse_key_value(ns.key_value)
         except ValueError as e:
-            print(f"\n  {colorize('✘ Error:', 'red')} {e}\n")
+            _p()
+            _p(f"  {_c('ERROR', 'red')} {e}")
+            _p()
+            return 2
+        old = cfg.get(key)
+        cfg.set(key, value)
+        _p()
+        _p(f"  {_c('OK', 'green')} Config actualizada: {key} = {value}")
+        if old is not None:
+            _p(f"  {_c(f'(anterior: {old})', 'dim')}")
+        _p(f"  {_c('Cambios sin guardar. Usa bluesky config save para persistir.', 'yellow')}")
+        _p()
+        return 0
 
-    elif action == "save":
+    if ns.action == "save":
         try:
             cfg.save()
-            print(f"\n  {colorize('✅ Configuración guardada en:', 'green')} {cfg._path}\n")
+            _p()
+            _p(f"  {_c('OK', 'green')} Configuración guardada en: {cfg._path}")
+            _p()
+            return 0
         except Exception as e:
-            print(f"\n  {colorize('✘ Error guardando:', 'red')} {e}\n")
+            _p()
+            _p(f"  {_c('ERROR', 'red')} Guardando: {e}")
+            _p()
+            return 1
 
-    elif action == "reset":
+    if ns.action == "reset":
         cfg.reset_to_defaults()
-        print(f"\n  {colorize('🔄 Configuración reseteada a valores por defecto', 'yellow')}\n")
+        _p()
+        _p(f"  {_c('OK', 'yellow')} Configuración reseteada a valores por defecto")
+        _p()
+        return 0
 
-    elif action == "favorite" and len(args) >= 3:
-        if args[1] == "add" and len(args) >= 3:
-            addr = args[2]
-            name = args[3] if len(args) >= 4 else ""
-            type_ = args[4] if len(args) >= 5 else "auto"
-            cfg.add_favorite(addr, name, type_)
-            print(f"\n  {colorize('✅ Favorito añadido:', 'green')} {addr} ({name})\n")
-        elif args[1] == "remove" and len(args) >= 3:
-            cfg.remove_favorite(args[2])
-            print(f"\n  {colorize('✅ Favorito eliminado:', 'green')} {args[2]}\n")
-        else:
-            print(f"\n  {colorize('Uso:', 'bold')}")
-            print("    bluesky config favorite add <MAC> [nombre] [tipo]")
-            print("    bluesky config favorite remove <MAC>\n")
+    # favorite
+    if ns.fav_action == "add":
+        cfg.add_favorite(ns.address, ns.name, ns.type)
+        _p()
+        _p(f"  {_c('OK', 'green')} Favorito añadido: {ns.address} ({ns.name})")
+        _p()
+        return 0
+    if ns.fav_action == "remove":
+        cfg.remove_favorite(ns.address)
+        _p()
+        _p(f"  {_c('OK', 'green')} Favorito eliminado: {ns.address}")
+        _p()
+        return 0
+    sp_fav.print_help()
+    return 2
 
-    else:
-        print(f"\n  {colorize('Uso:', 'bold')}")
-        print("    bluesky config               Ver configuración")
-        print("    bluesky config set <kv>      Cambiar valor (ej: general.timeout=60)")
-        print("    bluesky config save          Persistir cambios")
-        print("    bluesky config reset         Valores por defecto")
-        print("    bluesky config favorite ...  Gestionar favoritos\n")
 
+# --------------------------------------------------------------- plugin
 
 def cmd_plugin(args: list):
     """Gestiona los plugins de bluesky."""
-    from bluesky.core.engine import ModuleEngine
+    p = argparse.ArgumentParser(
+        prog="bluesky plugin",
+        description="Gestionar plugins del catálogo.",
+    )
+    sub = p.add_subparsers(dest="action")
+    sub.add_parser("list", help="listar plugins (acción por defecto)")
+    sp_info = sub.add_parser("info", help="detalle de un plugin")
+    sp_info.add_argument("name")
+    sp_create = sub.add_parser("create", help="crear un plugin nuevo a partir de plantilla")
+    sp_create.add_argument("name")
+    sp_create.add_argument("type", nargs="?", default="attack",
+                           help="tipo: attack|scanner|exploit (default: attack)")
+    ns = p.parse_args(args)
 
     engine = ModuleEngine(load_plugins=True)
 
-    if not args or args[0] == "list":
+    if ns.action in (None, "list"):
         plugins = engine.plugin_loader.list_plugins() if engine.plugin_loader else []
-        print(f"\n{separator(title=' Plugins ')}")
-        print(f"  {colorize(f'{len(plugins)} plugin(s) descubierto(s)', 'bold')}")
-        print(f"  {colorize(f'{sum(1 for p in plugins if p.loaded)} cargado(s)', 'bold')}\n")
+        loaded = sum(1 for pl in plugins if pl.loaded)
+        _p()
+        _p(separator(title=" Plugins "))
+        _p(f"  {_c(f'{len(plugins)} plugin(s) descubierto(s)', 'bold')} · "
+           f"{_c(f'{loaded} cargado(s)', 'bold')}")
+        _p()
+        for pl in plugins:
+            status = _c("OK", "green") if pl.loaded else _c("FALLO", "red")
+            _p(f"  [{status}] {_c(pl.name, 'cyan')} — {str(pl.description)[:50]}")
+            _p(f"      {_c(f'{pl.plugin_type} · v{pl.version} · {pl.author}', 'dim')}")
+            if pl.error:
+                _p(f"      {_c(f'Error: {pl.error}', 'red')}")
+            _p()
+        return 0
 
-        for p in plugins:
-            status = colorize('✅', 'green') if p.loaded else colorize('❌', 'red')
-            print(f"  {status} {colorize(p.name, 'cyan'):20} {p.description[:50]}")
-            print(f"      Type: {p.plugin_type}  |  v{p.version}  |  Author: {p.author}")
-            if p.error:
-                print(f"      {colorize(f'Error: {p.error}', 'red')}")
-            print()
-        return
-
-    action = args[0]
-    if action == "info" and len(args) >= 2:
+    if ns.action == "info":
         if not engine.plugin_loader:
-            print(f"\n  {colorize('⚠️  No hay sistema de plugins cargado', 'yellow')}\n")
-            return
-        info = engine.plugin_loader.get_plugin_info(args[1])
-        if info:
-            print(f"\n{separator(title=f' Plugin: {info.name} ')}")
-            print(f"  Name:     {info.name}")
-            print(f"  Version:  {info.version}")
-            print(f"  Type:     {info.plugin_type}")
-            print(f"  Author:   {info.author}")
-            print(f"  Desc:     {info.description}")
-            print(f"  Class:    {info.module_class}")
-            print(f"  Path:     {info.path}")
-            print(f"  Loaded:   {colorize('✅' if info.loaded else '❌', 'green' if info.loaded else 'red')}")
-            if info.error:
-                print(f"  Error:    {colorize(info.error, 'red')}")
-            print()
-        else:
-            print(f"\n  {colorize('✘ Plugin no encontrado:', 'red')} '{args[1]}'\n")
-    elif action == "create" and len(args) >= 2:
-        plugin_type = args[2] if len(args) >= 3 else "attack"
-        from bluesky.core.plugin_loader import create_plugin_template, ensure_plugins_directory
-        code = create_plugin_template(args[1], plugin_type)
-        plugins_dir = ensure_plugins_directory()
-        plugin_file = plugins_dir / f"{args[1]}.py"
-        plugin_file.write_text(code)
-        print(f"\n  {colorize('✅ Plugin creado:', 'green')} {plugin_file}\n")
-    else:
-        print(f"\n  {colorize('Uso:', 'bold')}")
-        print("    bluesky plugin              Listar plugins")
-        print("    bluesky plugin list         Listar plugins")
-        print("    bluesky plugin info <name>  Info de un plugin")
-        print("    bluesky plugin create <name> [type]  Crear nuevo plugin\n")
+            _p()
+            _p(f"  {_c('No hay sistema de plugins cargado', 'yellow')}")
+            _p()
+            return 1
+        info = engine.plugin_loader.get_plugin_info(ns.name)
+        if not info:
+            _p()
+            _p(f"  {_c('ERROR', 'red')} Plugin no encontrado: '{ns.name}'")
+            _p()
+            return 1
+        _p()
+        _p(separator(title=f" Plugin: {info.name} "))
+        for k, v in (("Name", info.name), ("Version", info.version),
+                     ("Type", info.plugin_type), ("Author", info.author),
+                     ("Desc", info.description), ("Class", info.module_class),
+                     ("Path", info.path)):
+            _p(f"  {_c(k.ljust(10), 'dim')} {v}")
+        loaded = _c("sí", "green") if info.loaded else _c("no", "red")
+        _p(f"  {_c('Loaded'.ljust(10), 'dim')} {loaded}")
+        if info.error:
+            _p(f"  {_c('Error'.ljust(10), 'dim')} {_c(info.error, 'red')}")
+        _p()
+        return 0
+
+    # create
+    from bluesky.core.plugin_loader import create_plugin_template, ensure_plugins_directory
+    code = create_plugin_template(ns.name, ns.type)
+    plugins_dir = ensure_plugins_directory()
+    plugin_file = plugins_dir / f"{ns.name}.py"
+    plugin_file.write_text(code)
+    _p()
+    _p(f"  {_c('OK', 'green')} Plugin creado: {plugin_file}")
+    _p()
+    return 0
 
 
-def cmd_vuln(args: list):
-    """Ejecuta VulnScanner - análisis de vulnerabilidades Bluetooth."""
-    if not args or args[0] in ("-h", "--help"):
-        print(f"\n{separator(title=' VulnScanner - Análisis de Vulnerabilidades ')}")
-        print("  Analiza un dispositivo contra 13+ vulnerabilidades Bluetooth conocidas:")
-        print("  KNOB, BIAS, BLUFFS, BlueBorne, BlueFrag, SweynTooth, etc.")
-        print()
-        print(f"  {colorize('USO:', 'bold')}")
-        print("    bluesky vuln <MAC>                    Análisis completo")
-        print("    bluesky vuln <MAC> --options '{\"SCAN_TYPE\":\"quick\"}'  Rápido")
-        print("    bluesky vuln <MAC> --options '{\"REPORT\":\"true\"}'     Con reporte HTML")
-        print()
-        print(f"  {colorize('PASOS:', 'bold')}")
-        print("    1. Descubrir información del dispositivo")
-        print("    2. Escanear servicios SDP/RFCOMM")
-        print("    3. Detectar vulnerabilidades conocidas")
-        print("    4. Generar perfil de vulnerabilidad")
-        print("    5. Recomendar cadena de ataque")
-        print()
-        return
-
-    target = args[0] if args else ""
-    options = {}
-
-    # Parsear --options
-    i = 1
-    while i < len(args):
-        if args[i] == "--options" and i + 1 < len(args):
-            try:
-                options = json.loads(args[i + 1])
-            except json.JSONDecodeError:
-                print(f"  {colorize('✘ Error:', 'red')} Opciones JSON inválidas\n")
-                return
-            i += 2
-        else:
-            i += 1
-
-    engine = ModuleEngine()
-    print(f"\n{separator(title=' VulnScanner ')}")
-    print(f"  Target: {colorize(target, 'cyan')}")
-    if options:
-        print(f"  Options: {options}")
-    print()
-
-    result = engine.run_module("vuln", target=target, options=options)
-
-    if result.get("success"):
-        print(f"  {colorize('✅ Análisis completado', 'green')}\n")
-    else:
-        print(f"  {colorize('⚠️  Análisis completado con notas', 'yellow')}\n")
-
-    data = result.get("data", {})
-
-    # Mostrar información del dispositivo
-    dev_info = data.get("device_info", {})
-    if dev_info:
-        print(f"  {colorize('📱 Dispositivo:', 'bold')}")
-        print(f"    Nombre:      {dev_info.get('name', 'Unknown')}")
-        print(f"    MAC:         {dev_info.get('mac', 'N/A')}")
-        print(f"    Clase:       {dev_info.get('class', 'Unknown')}")
-        print(f"    Fabricante:  {dev_info.get('manufacturer', 'Unknown')}")
-        print()
-
-    # Mostrar vulnerabilidades encontradas
-    vulns = data.get("vulnerabilities", [])
-    found = [v for v in vulns if v.get("vulnerable", False)]
-    if found:
-        print(f"  {colorize('🎯 Vulnerabilidades encontradas:', 'bold')}")
-        for v in found:
-            sev_icon = severity_icon(v.get("severity", "low"))
-            sev_color = "red" if v["severity"] == "critical" else "yellow"
-            print(f"    {sev_icon} {colorize(v['id'], sev_color):18} {v['name'][:60]}")
-            if v.get("cve"):
-                print(f"       CVE: {colorize(v['cve'], 'dim')}")
-            if v.get("evidence"):
-                print(f"       → {v['evidence'][:80]}")
-            if v.get("module"):
-                mod_name = v["module"]
-                print(f"       💻 {colorize(f'bluesky attack {mod_name} {target}', 'cyan')}")
-            print()
-
-    # Mostrar resumen
-    summary = data.get("summary")
-    if summary and not found:
-        for line in summary.split("\n"):
-            if line.strip():
-                print(f"  {line.strip()}")
-
-    # Mostrar recomendaciones
-    recs = data.get("recommendations", [])
-    if recs:
-        print(f"  {colorize('📋 Recomendaciones:', 'bold')}")
-        for r in recs:
-            print(f"    {r}")
-        print()
-
-    # Mostrar stats
-    stats = data.get("stats", {})
-    if stats:
-        print(f"  {colorize('📊 Estadísticas:', 'bold')}")
-        print(f"    Checks: {stats.get('total_checks', 0)}  |  "
-              f"Vulnerables: {stats.get('vulnerable', 0)}  |  "
-              f"Críticas: {stats.get('critical', 0)}  |  "
-              f"Altas: {stats.get('high', 0)}")
-        print()
-
-    error = result.get("error")
-    if error and not result.get("success"):
-        print(f"\n  {colorize(f'✘ {error}', 'red')}")
-    print()
-
-
-def cmd_auto(args: list):
-    """Ejecuta Autopilot - scan → vuln → attack → report automatizado."""
-    if not args or args[0] in ("-h", "--help"):
-        print(f"\n{separator(title=' Autopilot v2.0 - Automático ')}")
-        print("  Pipeline completo: Escaneo → Vuln Detection → Ataques → Reporte")
-        print()
-        print(f"  {colorize('USO:', 'bold')}")
-        print("    bluesky auto                  Auto a todos los dispositivos")
-        print("    bluesky auto <MAC>            Auto a target específico")
-        print("    bluesky auto --mode detect    Solo detectar vulnerabilidades")
-        print("    bluesky auto --mode attack    Solo fase de ataque")
-        print()
-        print(f"  {colorize('OPCIONES:', 'bold')}")
-        print("    --mode detect|attack|full     Modo de operación (default: full)")
-        print("    --chain \"mod1,mod2,mod3\"       Cadena personalizada de ataques")
-        print("    --timeout <n>                 Timeout por módulo (default: 30)")
-        print()
-        print(f"  {colorize('PASOS (full):', 'bold')}")
-        print("    1. Escanear dispositivos Bluetooth")
-        print("    2. Detectar vulnerabilidades en cada uno")
-        print("    3. Construir cadena de ataque según vulns")
-        print("    4. Ejecutar ataques automáticamente")
-        print("    5. Generar reporte HTML")
-        print()
-        return
-
-    target = ""
-    options = {}
-
-    i = 0
-    while i < len(args):
-        arg = args[i]
-        if arg == "--mode" and i + 1 < len(args):
-            options["MODE"] = args[i + 1]
-            i += 2
-        elif arg == "--chain" and i + 1 < len(args):
-            options["CHAIN"] = args[i + 1]
-            i += 2
-        elif arg == "--timeout" and i + 1 < len(args):
-            options["TIMEOUT"] = args[i + 1]
-            i += 2
-        elif arg.startswith("--"):
-            i += 1
-        else:
-            target = arg
-            i += 1
-
-    engine = ModuleEngine()
-    mode = options.get("MODE", "full")
-    print(f"\n{separator(title=f' ⚡ Autopilot v2.0 - Mode: {mode.upper()} ')}")
-    if target:
-        print(f"  Target: {colorize(target, 'cyan')}")
-    print()
-
-    result = engine.run_module("autopilot", target=target, options=options)
-
-    data = result.get("data", {})
-
-    # Mostrar resumen completo
-    summary = data.get("summary", "")
-    if summary:
-        for line in summary.split("\n"):
-            if line.strip():
-                print(f"  {line.strip()}")
-
-    # Mostrar stats
-    stats = data.get("stats", {})
-    if stats:
-        print()
-        print(f"  {colorize('📊 Estadísticas finales:', 'bold')}")
-        print(f"    Targets:      {stats.get('targets', 0)}")
-        print(f"    Ataques:      {stats.get('attacks_total', 0)}")
-        print(f"    Exitosos:     {stats.get('attacks_successful', 0)}")
-        print(f"    Vulns encontradas: {stats.get('vulnerabilities_found', 0)}")
-        print()
-
-    # Mostrar ruta del reporte
-    report_path = data.get("report_path")
-    if report_path:
-        print(f"  {colorize(f'📊 Reporte: {report_path}', 'green')}")
-        print()
-
-    error = result.get("error")
-    if error and not result.get("success"):
-        print(f"\n  {colorize(f'✘ {error}', 'red')}")
-    print()
-
-
-def cmd_spam(args: list):
-    """Ejecuta BTSpam - Bluetooth Spam contra uno o TODOS los dispositivos."""
-    if not args or args[0] in ("-h", "--help"):
-        print(f"\n{separator(title=' BTSpam - Bluetooth Spam ')}")
-        print("  Inunda dispositivos Bluetooth con solicitudes de emparejamiento,")
-        print("  mensajes OBEX Push y conexiones RFCOMM.")
-        print()
-        print(f"  {colorize('📋 PASOS DEL ATAQUE:', 'bold')}")
-        print(f"    {colorize('Paso 1', 'cyan')}: Escaneo de dispositivos Bluetooth cercanos")
-        print(f"    {colorize('Paso 2', 'cyan')}: Identificación de targets disponibles")
-        print(f"    {colorize('Paso 3', 'cyan')}: Selección de técnicas de spam:")
-        print("             • pairing_flood    → solicitudes de emparejamiento")
-        print("             • obex_spam        → mensajes OBEX Push repetidos")
-        print("             • connection_flood → apertura/cierre masivo RFCOMM")
-        print(f"    {colorize('Paso 4', 'cyan')}: Ejecución multi-hilo simultánea")
-        print(f"    {colorize('Paso 5', 'cyan')}: Monitoreo de estadísticas en tiempo real")
-        print(f"    {colorize('Paso 6', 'cyan')}: Generación de resumen del ataque")
-        print()
-        print(f"  {colorize('🎯 ATAQUE A UN SOLO TARGET:', 'bold')}")
-        print("    bluesky spam AA:BB:CC:DD:EE:FF")
-        print("    bluesky spam AA:BB:CC:DD:EE:FF --method obex_spam --rate 50")
-        print()
-        print(f"  {colorize('🎯 ATAQUE A TODOS LOS DISPOSITIVOS (AUTOMÁTICO):', 'bold')}")
-        print(f"    {colorize('bluesky spam all', 'green')}                      ← Escanea y ataca a todos")
-        print(f"    {colorize('bluesky spam all --method pairing_flood', 'green')}")
-        print(f"    {colorize('bluesky spam all --method all --count 200', 'green')}")
-        print(f"    {colorize('bluesky spam all --rate 20 --duration 60', 'green')}")
-        print()
-        print(f"  {colorize('🎛️  OPCIONES:', 'bold')}")
-        print("    --method <m>     Método: all | pairing_flood | obex_spam | connection_flood")
-        print("    --rate <n>       Paquetes por segundo (1-100, default: 10)")
-        print("    --count <n>      Número de iteraciones (0=infinito, default: 50)")
-        print("    --duration <s>   Duración máxima en segundos (default: 30)")
-        print("    --delay <ms>     Delay entre ráfagas (default: 100)")
-        print("    --message <t>    Mensaje para OBEX Push (default: '👽 bluesky Spam!')")
-        print()
-        print(f"  {colorize('💡 EJEMPLOS RÁPIDOS:', 'bold')}")
-        print("    bluesky spam all                          # Atacar a todos")
-        print("    bluesky spam AA:BB:CC:DD:EE:FF            # Atacar MAC específica")
-        print("    bluesky spam all --method connection_flood --rate 50  # Flood de conexiones a todos")
-        print()
-        return
-
-    target = ""
-    options = {}
-
-    # Parsear args
-    i = 0
-    while i < len(args):
-        arg = args[i]
-        if arg == "--method" and i + 1 < len(args):
-            options["METHOD"] = args[i + 1]
-            i += 2
-        elif arg == "--rate" and i + 1 < len(args):
-            options["RATE"] = args[i + 1]
-            i += 2
-        elif arg == "--count" and i + 1 < len(args):
-            options["COUNT"] = args[i + 1]
-            i += 2
-        elif arg == "--duration" and i + 1 < len(args):
-            options["DURATION"] = args[i + 1]
-            i += 2
-        elif arg == "--delay" and i + 1 < len(args):
-            options["DELAY"] = args[i + 1]
-            i += 2
-        elif arg == "--message" and i + 1 < len(args):
-            options["MESSAGE"] = args[i + 1]
-            i += 2
-        elif arg.startswith("--"):
-            i += 1
-        else:
-            target = arg
-            i += 1
-
-    engine = ModuleEngine()
-
-    if target == "all":
-        print(f"\n{separator(title=' 🎯 BTSpam - MODO: TODOS LOS DISPOSITIVOS ')}")
-        print(f"  {colorize('📋 PASO 1-2:', 'cyan')} Escaneando dispositivos Bluetooth...")
-    else:
-        print(f"\n{separator(title=' 🎯 BTSpam Attack ')}")
-        print(f"  {colorize('📋 PASO 1-2:', 'cyan')} Target específico: {colorize(target, 'green')}")
-    if options:
-        print(f"  {colorize('📋 PASO 3:', 'cyan')} Técnicas: {colorize(options.get('METHOD', 'all'), 'yellow')}")
-    print(f"  {colorize('📋 PASO 4-6:', 'cyan')} Ejecutando ataque...")
-    print()
-
-    result = engine.run_module("btspam", target=target, options=options)
-
-    if result.get("success"):
-        print(f"  {colorize('✅ BTSpam ejecutado correctamente', 'green')}\n")
-    else:
-        print(f"  {colorize('⚠️  BTSpam completado con notas', 'yellow')}\n")
-
-    # Mostrar resultados
-    data = result.get("data", {})
-    for key in ("message", "warning", "summary"):
-        value = data.get(key)
-        if value and isinstance(value, str):
-            for line in value.split("\n"):
-                if line.strip():
-                    print(f"  {line.strip()}")
-
-    # Mostrar dispositivos encontrados (modo all)
-    devices = data.get("devices", []) or data.get("devices_found", [])
-    if devices and target == "all":
-        print(f"\n  {colorize('📱 Dispositivos atacados:', 'bold')}")
-        for d in devices:
-            mac = d.get("mac", "?")
-            name = d.get("name", "Unknown")
-            print(f"    🔵 {colorize(mac, 'cyan')} - {colorize(name, 'dim')}")
-    elif devices:
-        print(f"\n  {colorize('📱 Dispositivos detectados:', 'bold')}")
-        for d in devices:
-            mac = d.get("mac", "?")
-            name = d.get("name", "Unknown")
-            print(f"    🔵 {colorize(mac, 'cyan')} - {colorize(name, 'dim')}")
-
-    # Mostrar detalles de targets impactados (modo all)
-    hit_detail = data.get("targets_hit_detail", [])
-    if hit_detail:
-        print(f"\n  {colorize('✅ Dispositivos impactados:', 'bold')}")
-        for d in hit_detail:
-            print(f"    ✅ {colorize(d['mac'], 'green')} - {d['name']}")
-
-    # Mostrar estadísticas si existen
-    stats = data.get("stats", {})
-    if stats:
-        print(f"\n  {colorize('📊 Estadísticas:', 'bold')}")
-        for k, v in stats.items():
-            if k == "targets_hit":
-                continue
-            print(f"    {k}: {v}")
-        targets = stats.get("targets_hit", [])
-        if targets:
-            print(f"    targets_hit: {', '.join(list(targets)[:5])}")
-
-    error = result.get("error")
-    if error and not result.get("success"):
-        print(f"\n  {colorize(f'✘ {error}', 'red')}")
-
-    print()
-
+# --------------------------------------------------------------- web
 
 def cmd_web(args: list):
     """Inicia el dashboard web."""
-    port = 5000
-    host = "127.0.0.1"
-    debug = False
-    open_browser = False
+    p = argparse.ArgumentParser(
+        prog="bluesky web",
+        description="Iniciar el dashboard web (Flask).",
+    )
+    p.add_argument("-p", "--port", type=int, default=5000, metavar="PORT",
+                   help="puerto (default: 5000)")
+    p.add_argument("-H", "--host", default="127.0.0.1", metavar="HOST",
+                   help="interfaz de escucha (default: 127.0.0.1)")
+    p.add_argument("--debug", action="store_true", help="modo debug de Flask")
+    p.add_argument("-o", "--open", dest="open_browser", action="store_true",
+                   help="abrir el navegador al arrancar")
+    ns = p.parse_args(args)
 
-    i = 0
-    while i < len(args):
-        if args[i] in ("-p", "--port") and i + 1 < len(args):
-            port = int(args[i + 1])
-            i += 2
-        elif args[i] in ("-H", "--host") and i + 1 < len(args):
-            host = args[i + 1]
-            i += 2
-        elif args[i] == "--debug":
-            debug = True
-            i += 1
-        elif args[i] in ("-o", "--open"):
-            open_browser = True
-            i += 1
-        else:
-            i += 1
+    if not 1 <= ns.port <= 65535:
+        p.error("--port debe estar entre 1 y 65535")
 
     try:
         from bluesky.web.app import run_web_server
         run_web_server(
-            port=port,
-            host=host,
-            debug=debug,
-            open_browser=open_browser,
+            port=ns.port,
+            host=ns.host,
+            debug=ns.debug,
+            open_browser=ns.open_browser,
         )
+        return 0
     except ImportError as e:
-        print(f"\n  {colorize('✘ Error al iniciar dashboard web:', 'red')}")
-        print(f"  {e}")
-        print(f"\n  Instala Flask: {colorize('pip install flask', 'cyan')}\n")
+        _p()
+        _p(f"  {_c('ERROR', 'red')} No se pudo iniciar el dashboard web: {e}")
+        _p(f"  Instala Flask: {_c('pip install flask', 'cyan')}")
+        _p()
+        return 1
     except Exception as e:
-        print(f"\n  {colorize('✘ Error:', 'red')} {e}\n")
+        _p()
+        _p(f"  {_c('ERROR', 'red')} {e}")
+        _p()
+        return 1
 
+
+# --------------------------------------------------------------- educate
 
 def cmd_educate(args: list):
     """Modo educativo: explica un módulo paso a paso (qué/cómo/impacto/mitigación)."""
@@ -1054,20 +1218,24 @@ def cmd_educate(args: list):
         name = args[0]
         entry = get_education(name)
         if entry is None:
-            print(f"  {colorize('✘', 'red')} Sin contenido educativo para '{name}'")
-            print(f"  Disponibles: {', '.join(covered_modules())}")
-            return
+            _p(f"  {_c('ERROR', 'red')} Sin contenido educativo para '{name}'")
+            _p(f"  Disponibles: {', '.join(covered_modules())}")
+            return 2
     else:
         # Índice de contenidos
-        print(f"\n  {colorize('📚 MODO EDUCATIVO — contenidos', 'bold')}\n")
+        _p()
+        _p(f"  {_c('📚 MODO EDUCATIVO — contenidos', 'bold')}")
+        _p()
         for m in covered_modules():
-            print(f"    {colorize(m, 'cyan'):18} {EDU_DB[m]['title']}")
-        print(f"\n  Uso: {colorize('bluesky educate <módulo>', 'green')}\n")
-        return
+            _p(f"    {_c(m, 'cyan'):18} {EDU_DB[m]['title']}")
+        _p()
+        _p(f"  Uso: {_c('bluesky educate <módulo>', 'green')}")
+        _p()
+        return 0
 
     if not sys.stdout.isatty():
         print(format_education_plain(entry))
-        return
+        return 0
 
     try:
         from rich.console import Console
@@ -1075,23 +1243,63 @@ def cmd_educate(args: list):
         format_education_rich(entry, console)
     except Exception:
         print(format_education_plain(entry))
+    return 0
 
 
-def main():
-    """Punto de entrada principal."""
-    # Parsear --config global ANTES de determinar el comando
+# --------------------------------------------------------------- main
+
+def _split_globals(argv: list):
+    """Extrae opciones globales de cualquier posición de argv.
+
+    Devuelve (config, no_color, version, json, resto). Un --json global se
+    re-inyecta tras el subcomando para que lo consuma su propio parser.
+    """
     config_path = None
-    clean_args = []
-    skip_next = False
-    for i, arg in enumerate(sys.argv[1:]):
-        if skip_next:
-            skip_next = False
-            continue
-        if arg == "--config":
-            config_path = sys.argv[i + 2] if i + 2 < len(sys.argv) else None
-            skip_next = True
+    no_color = False
+    want_version = False
+    json_flag = False
+    rest = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in ("-V", "--version"):
+            want_version = True
+            i += 1
+        elif arg == "--config":
+            if i + 1 >= len(argv):
+                _p(f"  {_c('ERROR', 'red')} --config requiere la ruta al archivo")
+                sys.exit(2)
+            config_path = argv[i + 1]
+            i += 2
+        elif arg == "--no-color":
+            no_color = True
+            i += 1
+        elif arg == "--json":
+            json_flag = True
+            i += 1
         else:
-            clean_args.append(arg)
+            rest.append(arg)
+            i += 1
+    if json_flag:
+        if rest:
+            rest.insert(1, "--json")
+        else:
+            rest.append("--json")
+    return config_path, no_color, want_version, json_flag, rest
+
+
+def main(argv=None):
+    """Punto de entrada principal. Devuelve el exit code del proceso."""
+    if argv is None:
+        argv = sys.argv[1:]
+
+    config_path, no_color, want_version, json_flag, clean_args = _split_globals(argv)
+    _set_color_mode(no_color)
+    _set_json_mode(json_flag)
+
+    if want_version:
+        _p(f"bluesky {__version__}")
+        return 0
 
     # Cargar configuración
     from bluesky.utils.config import get_config
@@ -1100,37 +1308,43 @@ def main():
         cfg.load(config_path)
 
     if not clean_args or clean_args[0] in ("-h", "--help", "help"):
-        print_banner()
         print_help()
-        return
+        return 0
 
     command = clean_args[0]
     args = clean_args[1:]
 
-    # Comandos que no requieren banner
-    no_banner = ["scan", "list", "status", "console", "web", "educate"]
+    # Si se pide ayuda (-h/--help en cualquier posición), sin banner ni avisos
+    wants_help = any(a in ("-h", "--help") for a in clean_args)
 
-    if command not in no_banner:
+    # Comandos que no muestran banner
+    no_banner = ["scan", "list", "status", "console", "web", "educate",
+                 "info", "config", "session", "report", "plugin"]
+
+    if command not in no_banner and not _JSON and not wants_help:
         print_banner()
 
-    # Verificar Bluetooth activo (excepto para help/list/status)
-    if command not in ("list", "help", "status"):
+    # Verificar Bluetooth activo (solo para comandos que lo usan)
+    if (command not in ("list", "help", "status", "info", "educate", "config",
+                        "plugin", "session", "report", "web")
+            and not _JSON and not wants_help):
         from bluesky.utils.network import get_adapter_status
         bt_active, bt_msg = get_adapter_status()
         if not bt_active:
-            print(f"  {colorize('⚠️', 'yellow')} {bt_msg}")
-            print("  Algunos módulos pueden no funcionar correctamente.\n")
+            _p(f"  {_c('AVISO', 'yellow')} {bt_msg}")
+            _p("  Algunos módulos pueden no funcionar correctamente.")
+            _p()
 
     # Routing de comandos
     commands = {
         "scan": lambda: cmd_scan(args),
-        "list": lambda: cmd_list(),
+        "list": lambda: cmd_list(args),
         "info": lambda: print_module_info(args[0] if args else ""),
         "vuln": lambda: cmd_vuln(args),
         "auto": lambda: cmd_auto(args),
         "attack": lambda: cmd_attack(args),
         "services": lambda: cmd_services(args),
-        "status": lambda: cmd_status(),
+        "status": lambda: cmd_status(args),
         "report": lambda: cmd_report(args),
         "session": lambda: cmd_session(args),
         "console": lambda: start_console(),
@@ -1139,16 +1353,24 @@ def main():
         "plugin": lambda: cmd_plugin(args),
         "web": lambda: cmd_web(args),
         "educate": lambda: cmd_educate(args),
-        "help": lambda: (print_banner(), print_help()),
+        "help": lambda: print_help(),
     }
 
     cmd = commands.get(command)
-    if cmd:
-        cmd()
-    else:
-        print(f"\n  {colorize('✘ Comando desconocido:', 'red')} '{command}'")
-        print(f"  Usa '{colorize('bluesky help', 'cyan')}' para ver los comandos disponibles.\n")
+    if cmd is None:
+        suggestion = _suggest(command, list(commands.keys()))
+        _p()
+        _p(f"  {_c('ERROR', 'red')} Comando desconocido: '{command}'{suggestion}")
+        _p(f"  Usa {_c('bluesky help', 'cyan')} para ver los comandos disponibles.")
+        _p()
+        return 2
+
+    rc = cmd()
+    if isinstance(rc, int):
+        return rc
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
+
