@@ -107,9 +107,11 @@ class TestEngineRunDispatch(unittest.TestCase):
         def no_euid(*a, **k):
             raise AttributeError("module 'os' has no attribute 'geteuid'")
 
+        # Pasar target válido para que la validación MAC de BaseModule
+        # no bloquee antes de llegar al check de root.
         with mock.patch.object(os, "name", "nt"), \
              mock.patch.object(os, "geteuid", no_euid):
-            ok, msg = L2CAPFuzz().check_prerequisites()
+            ok, msg = L2CAPFuzz(target="00:11:22:33:44:55").check_prerequisites()
         self.assertFalse(ok)
         self.assertIn("root", msg.lower())
 

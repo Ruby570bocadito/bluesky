@@ -803,18 +803,31 @@ class BlueskyConsole(cmd.Cmd):
         args = shlex.split(arg) if arg else []
         for a in args:
             if a.startswith("--"):
-                fmt = a[2:]
+                # Whitelist de formatos válidos. Antes se aceptaba
+                # cualquier valor como fmt (p.ej. --../../../tmp/evil),
+                # que terminaba como parte del filename más abajo.
+                candidate = a[2:].lower()
+                if candidate in ("html", "json", "txt"):
+                    fmt = candidate
             else:
                 filename = a
 
-        summary = self.session.summary()
-        summary["session"] = {
-            "name": self.session.name,
-            "date": __import__('datetime').datetime.now().isoformat()[:10],
-            "environment": "Termux" if HardwareDetector.is_termux() else "Linux",
-            "duration": "N/A",
+        # Reporter espera un payload con claves 'session{name,date,...}',
+        # 'targets[]' y 'results[]'. Antes pasábamos session.summary()
+        # que tiene claves distintas (total_targets, total_results, sin
+        # results[]), lo que producía reportes con sección de resultados
+        # vacía (Tests=0) aunque la sesión tuviera resultados cargados.
+        reporter_payload = {
+            "session": {
+                "name": self.session.name,
+                "date": __import__('datetime').datetime.now().isoformat()[:10],
+                "environment": "Termux" if HardwareDetector.is_termux() else "Linux",
+                "duration": "N/A",
+            },
+            "targets": self.session.targets if isinstance(self.session.targets, list) else [],
+            "results": self.session.results if isinstance(self.session.results, list) else [],
         }
-        reporter = Reporter(summary)
+        reporter = Reporter(reporter_payload)
 
         if not filename:
             filename = f"bluesky_report_{self.session.name}.{fmt}"
@@ -822,6 +835,18 @@ class BlueskyConsole(cmd.Cmd):
         output_dir = Path("reports")
         output_dir.mkdir(exist_ok=True)
         filepath = output_dir / filename
+        # Defensa contra path traversal: el filename puede venir del input
+        # del usuario (REPL), y sin esta comprobación un nombre como
+        # '../../tmp/evil.html' escribiría fuera de reports/.
+        try:
+            resolved = filepath.resolve()
+            base = output_dir.resolve()
+            if base not in resolved.parents and resolved != base:
+                print(f"  {colorize('Filename inválido (path traversal).', 'red')}")
+                return
+        except (OSError, RuntimeError):
+            print(f"  {colorize('Filename inválido.', 'red')}")
+            return
 
         if fmt == "html":
             reporter.to_html(str(filepath))

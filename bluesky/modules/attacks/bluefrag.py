@@ -96,7 +96,7 @@ class BlueFrag(BaseModule):
     target_type = "android"
     severity = "critical"
     module_options = {
-        "TARGET": "Dirección MAC del dispositivo Android objetivo",
+        "TARGET": "Dirección MAC del dispositivo Android objetivo (opcional para modo scan)",
         "MODE": "Modo: scan, exploit, dos, info (default: scan)",
         "PAYLOAD": "Comando a ejecutar en el dispositivo (modo exploit)",
         "PACKET_COUNT": "Número de paquetes a enviar (default: 100)",
@@ -792,6 +792,10 @@ class BlueFrag(BaseModule):
 
     def check_prerequisites(self) -> Tuple[bool, str]:
         """Verifica dependencias."""
+        # Validación MAC global (BaseModule)
+        ok, msg = super().check_prerequisites()
+        if not ok:
+            return False, msg
         missing = []
         # scapy no es obligatorio (modo simulación disponible)
         if not SCAPY_AVAILABLE:

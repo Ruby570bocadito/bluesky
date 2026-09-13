@@ -594,6 +594,10 @@ class Crackle(BaseModule):
 
     def check_prerequisites(self) -> Tuple[bool, str]:
         """Verifica dependencias."""
+        # Validación MAC global (BaseModule)
+        ok, msg = super().check_prerequisites()
+        if not ok:
+            return False, msg
         missing = []
         if not SCAPY_AVAILABLE:
             missing.append("scapy (pip install scapy)")

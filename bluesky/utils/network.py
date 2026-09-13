@@ -11,7 +11,14 @@ from .platform import is_windows, is_termux, is_wsl
 
 
 def mac_valid(mac: str) -> bool:
-    """Valida formato de dirección MAC."""
+    """Valida formato de dirección MAC.
+
+    Acepta los formatos XX:XX:XX:XX:XX:XX y XX-XX-XX-XX-XX-XX (hex).
+    Tolerante a None y tipos no-str: devuelve False en lugar de lanzar
+    TypeError (lo que podría romper callers que no validan input).
+    """
+    if not isinstance(mac, str):
+        return False
     pattern = r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$'
     return bool(re.match(pattern, mac))
 

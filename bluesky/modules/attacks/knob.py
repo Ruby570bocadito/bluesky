@@ -647,6 +647,10 @@ class Knob(BaseModule):
 
     def check_prerequisites(self) -> Tuple[bool, str]:
         """Verifica herramientas y dependencias necesarias."""
+        # Validación MAC global (BaseModule)
+        ok, msg = super().check_prerequisites()
+        if not ok:
+            return False, msg
         missing = []
 
         # Herramientas básicas

@@ -155,6 +155,10 @@ class Bluebugging(BaseModule):
 
     def check_prerequisites(self) -> tuple:
         """Verifica que rfcomm esté disponible."""
+        # Validación MAC global (BaseModule)
+        ok, msg = super().check_prerequisites()
+        if not ok:
+            return False, msg
         import shutil
         if not shutil.which("rfcomm"):
             return False, "Se necesita 'rfcomm' (bluez-tools). Instala: sudo apt install bluez-tools"

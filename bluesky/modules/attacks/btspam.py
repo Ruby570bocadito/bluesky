@@ -816,6 +816,10 @@ class BTSpam(BaseModule):
 
     def check_prerequisites(self) -> Tuple[bool, str]:
         """Verifica que haya Bluetooth disponible."""
+        # Validación MAC global (BaseModule)
+        ok, msg = super().check_prerequisites()
+        if not ok:
+            return False, msg
         import shutil
         if _is_windows():
             try:

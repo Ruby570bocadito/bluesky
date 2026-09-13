@@ -896,11 +896,15 @@ def cmd_report(args: list):
 
     from bluesky.utils.config import get_config
     cfg = get_config()
+    # Default: lo que diga la config. Si el usuario pasa --html/--json/--txt
+    # explícitamente, eso sobreescribe.
     report_fmt = cfg.get("general.report_format", "txt")
     if ns.html:
         report_fmt = "html"
     elif ns.json:
         report_fmt = "json"
+    elif ns.txt:
+        report_fmt = "txt"
 
     session = Session()
     if not session.load():
@@ -911,8 +915,22 @@ def cmd_report(args: list):
         session.created_at = datetime.datetime.now().isoformat()
         _p(f"  {_c('Creando sesión por defecto...', 'dim')}")
 
-    summary = session.summary()
-    reporter = Reporter(summary)
+    # Reporter espera un payload con claves 'session{name,date,...}',
+    # 'targets[]' y 'results[]'. Antes pasábamos session.summary() que
+    # tiene claves distintas (total_targets, total_results, sin results[]),
+    # lo que producía reportes con "Session: N/A, Date: N/A" y sin sección
+    # de resultados (Tests=0).
+    reporter_payload = {
+        "session": {
+            "name": session.name,
+            "date": session.created_at,
+            "duration": "",
+            "environment": "",
+        },
+        "targets": session.targets if isinstance(session.targets, list) else [],
+        "results": session.results if isinstance(session.results, list) else [],
+    }
+    reporter = Reporter(reporter_payload)
 
     output_file = ns.output
     if not output_file:

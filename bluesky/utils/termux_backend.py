@@ -41,18 +41,16 @@ log = logging.getLogger("bluesky.termux")
 
 # ─── Validación de MAC ──────────────────────────────────────────────────────
 
-# MAC Bluetooth: XX:XX:XX:XX:XX:XX o XX-XX-XX-XX-XX-XX (hex).
-# Validar antes de pasar a subprocess evita que un caller poco cuidadoso
-# (p.ej. un plugin hostil o input de usuario sin sanitizar) introduzca
-# argumentos extra en la línea de comandos de termux-bluetooth-*.
-_MAC_RE = re.compile(
-    r"^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$"
-)
-
-
+# Validación MAC delegada al helper canónico en utils.network.
+# Antes teníamos un _MAC_RE duplicado aquí; ahora reusamos mac_valid.
+# Lazy import para evitar circular import al inicio del módulo.
 def _is_valid_mac(address: str) -> bool:
-    """Valida que una dirección tenga formato MAC Bluetooth."""
-    return isinstance(address, str) and bool(_MAC_RE.match(address))
+    """Valida que una dirección tenga formato MAC Bluetooth.
+
+    Delega en bluesky.utils.network.mac_valid (fuente única de verdad).
+    """
+    from .network import mac_valid
+    return mac_valid(address)
 
 
 # ─── Verificaciones ──────────────────────────────────────────────────────────

@@ -112,7 +112,7 @@ class BTLEJack(BaseModule):
     target_type = "ble"
     severity = "critical"
     module_options = {
-        "TARGET": "Dirección MAC del objetivo (Master:Slave, ej: 'AA:BB:CC:DD:EE:FF:11:22:33:44:55:66')",
+        "TARGET": "Dirección MAC del objetivo (opcional, formato 'Master:Slave' ej: 'AA:BB:CC:DD:EE:FF:11:22:33:44:55:66')",
         "MODE": "Modo de operación: scan, sniff, hijack, mitm, inject (default: scan)",
         "CHANNEL": "Canal BLE (37, 38, 39 para advertising; 0-36 para datos) (default: auto)",
         "ACCESS_ADDRESS": "Access Address de la conexión (hex, 4 bytes)",
@@ -646,6 +646,10 @@ class BTLEJack(BaseModule):
 
     def check_prerequisites(self) -> Tuple[bool, str]:
         """Verifica dependencias (no blocking - modo simulación disponible)."""
+        # Validación MAC global (BaseModule)
+        ok, msg = super().check_prerequisites()
+        if not ok:
+            return False, msg
         missing = []
         if not SCAPY_AVAILABLE:
             log.warning("scapy no instalado - modo simulación")

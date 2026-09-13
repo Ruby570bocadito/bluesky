@@ -535,6 +535,10 @@ class Sweyntooth(BaseModule):
     # ─── Prerrequisitos ──────────────────────────────────────────────────────
 
     def check_prerequisites(self) -> Tuple[bool, str]:
+        # Validación MAC global (BaseModule)
+        ok, msg = super().check_prerequisites()
+        if not ok:
+            return False, msg
         missing = []
         for cmd in ["hcitool", "gatttool", "bluetoothctl"]:
             if not shutil.which(cmd):

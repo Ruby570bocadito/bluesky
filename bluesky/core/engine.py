@@ -3,7 +3,6 @@ ModuleEngine - Carga y gestión dinámica de módulos de ataque/escaneo.
 """
 
 import os
-import re
 import inspect
 import importlib
 from pathlib import Path
@@ -13,19 +12,17 @@ if TYPE_CHECKING:
     from bluesky.core.plugin_loader import PluginLoader
 
 
-# MAC Bluetooth: XX:XX:XX:XX:XX:XX o XX-XX-XX-XX-XX-XX (hex).
-# Validar antes de pasar a subprocess evita que un caller poco cuidadoso
-# introduzca argumentos extra en la línea de comandos de hcitool/sdptool/
-# bluetoothctl/termux-bluetooth-* (defensa en profundidad aunque el argv
-# separado ya evita shell injection).
-_MAC_RE = re.compile(
-    r"^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$"
-)
-
-
+# Validación MAC delegada al helper canónico en utils.network.
+# Esto evita duplicar el regex en 3 sitios (utils/network.py:mac_valid,
+# utils/termux_backend.py:_is_valid_mac, y el que teníamos aquí antes).
+# Lazy import para evitar circular import entre core y utils.
 def is_valid_mac(address: str) -> bool:
-    """Valida que una dirección tenga formato MAC Bluetooth."""
-    return isinstance(address, str) and bool(_MAC_RE.match(address))
+    """Valida que una dirección tenga formato MAC Bluetooth.
+
+    Delega en bluesky.utils.network.mac_valid (fuente única de verdad).
+    """
+    from bluesky.utils.network import mac_valid
+    return mac_valid(address)
 
 
 class BaseModule:
@@ -67,12 +64,13 @@ class BaseModule:
             # verificar si está en options
             if not self.options or not self.options.get("TARGET", ""):
                 # Algunos módulos definen TARGET como opcional (p.ej.
-                # crackle lo usa "para filtrado"). Si el módulo marca la
-                # opción con descripción que contiene 'opcional', no la
-                # exijamos. Esto es heurístico pero respeta la semántica
-                # existente sin romper tests.
-                target_desc = str(self.module_options.get("TARGET", ""))
-                if "opcional" not in target_desc.lower():
+                # crackle lo usa "para filtrado", btspam admite "vacío = todos",
+                # btlejack/bluefrag aceptan vacío para modo scan). Si el
+                # módulo marca la opción con descripción que contiene 'opcional'
+                # o 'vacío'/'vacio', no la exijamos. Heurístico pero respeta
+                # la semántica existente sin romper tests.
+                target_desc = str(self.module_options.get("TARGET", "")).lower()
+                if not any(k in target_desc for k in ("opcional", "vacío", "vacio")):
                     return False, "Se requiere un target (MAC address). Usa set TARGET <MAC> o pasa el target al ejecutar."
 
         # Validar formato de MAC si se proporcionó target (defensa en
