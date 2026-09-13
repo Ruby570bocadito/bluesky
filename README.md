@@ -23,7 +23,7 @@
 <p align="center">
   <img src="docs/assets/demo_cli.gif" alt="Live bluesky CLI session — module intel, offline OUI lookup and educational mode" width="730">
 </p>
-<p align="center"><em>Live CLI (v0.6.0): module intel for KNOB, 100% offline OUI vendor lookup and the educational mode — real output, nothing staged.</em></p>
+<p align="center"><em>Live CLI (v0.6.1): module intel for KNOB, 100% offline OUI vendor lookup and the educational mode — real output, nothing staged.</em></p>
 
 ![bluesky demo: real CLI and web dashboard session](docs/assets/demo_bluesky.mp4)
 

@@ -15,13 +15,24 @@ except FileNotFoundError:
 
 setup(
     name="bluesky",
-    version="0.6.0",
+    version="0.6.1",
     author="Ruby570bocadito",
     description="Bluetooth Security Auditing Framework for Windows, Linux & Termux",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Ruby570bocadito/bluesky",
     packages=find_packages(),
+    # Datos no-Python del dashboard web: SIN esto, `pip install bluesky`
+    # no incluye templates/ ni static/ y `bluesky web` falla con
+    # jinja2.exceptions.TemplateNotFound (index.html / error.html).
+    include_package_data=True,
+    package_data={
+        "bluesky.web": [
+            "templates/*.html",
+            "static/*.css",
+            "static/*.js",
+        ],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

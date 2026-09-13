@@ -96,8 +96,11 @@ def _section(title: str) -> None:
 # --------------------------------------------------------------- banner
 
 def print_banner():
-    """Banner compacto y profesional."""
+    """Banner compacto estilo Metasploit: logo ASCII + versión + aviso."""
+    from bluesky.utils.format import ASCII_LOGO
     _p()
+    for line in ASCII_LOGO.split("\n"):
+        _p(f"  {_c(line, 'cyan')}")
     _p(f"  {_c('bluesky', 'bold')} {_c(f'v{__version__}', 'dim')} {_c('·', 'faint')} {__description__}")
     _p(f"  {_c('Linux · Windows · Termux — úsalo solo en auditorías autorizadas', 'dim')}")
     _p()
@@ -154,6 +157,7 @@ def print_help():
         ("--config <archivo>", "Archivo de configuración personalizado"),
         ("--json", "Salida JSON (scan, list, info, status)"),
         ("--no-color", "Desactivar color (respeta NO_COLOR)"),
+        ("-v, --verbose", "Mostrar warnings/debug de los módulos (por defecto silencioso)"),
         ("--version", "Mostrar la versión y salir"),
     ]
     for flag, desc in rows:
@@ -1317,13 +1321,15 @@ def cmd_educate(args: list):
 def _split_globals(argv: list):
     """Extrae opciones globales de cualquier posición de argv.
 
-    Devuelve (config, no_color, version, json, resto). Un --json global se
-    re-inyecta tras el subcomando para que lo consuma su propio parser.
+    Devuelve (config, no_color, version, json, verbose, resto). Un --json
+    global se re-inyecta tras el subcomando para que lo consuma su propio
+    parser.
     """
     config_path = None
     no_color = False
     want_version = False
     json_flag = False
+    verbose = False
     rest = []
     i = 0
     while i < len(argv):
@@ -1343,6 +1349,9 @@ def _split_globals(argv: list):
         elif arg == "--json":
             json_flag = True
             i += 1
+        elif arg in ("-v", "--verbose"):
+            verbose = True
+            i += 1
         else:
             rest.append(arg)
             i += 1
@@ -1351,7 +1360,7 @@ def _split_globals(argv: list):
             rest.insert(1, "--json")
         else:
             rest.append("--json")
-    return config_path, no_color, want_version, json_flag, rest
+    return config_path, no_color, want_version, json_flag, verbose, rest
 
 
 def main(argv=None):
@@ -1359,9 +1368,19 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
 
-    config_path, no_color, want_version, json_flag, clean_args = _split_globals(argv)
+    config_path, no_color, want_version, json_flag, verbose, clean_args = _split_globals(argv)
     _set_color_mode(no_color)
     _set_json_mode(json_flag)
+
+    # Logging silencioso por defecto (estilo msfconsole): los avisos de
+    # dependencias opcionales (scapy, libpcap, ...) ya se comunican por la
+    # UI (list / info / check reportan qué requiere cada módulo), así que
+    # repetirlos en stderr al arrancar solo ensucia la terminal. Con
+    # --verbose se recuperan los warnings y debug del framework.
+    import logging
+    logging.getLogger("bluesky").setLevel(
+        logging.DEBUG if verbose else logging.ERROR
+    )
 
     if want_version:
         _p(f"bluesky {__version__}")

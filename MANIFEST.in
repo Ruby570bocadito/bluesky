@@ -1,0 +1,12 @@
+# Datos no-Python que deben viajar en el sdist y en el wheel.
+# Sin estas reglas el paquete instalado carece de plantillas y estáticos
+# y `bluesky web` lanza jinja2.exceptions.TemplateNotFound.
+include README.md
+include LICENSE
+include CHANGELOG.md
+include requirements.txt
+recursive-include bluesky/web/templates *.html
+recursive-include bluesky/web/static *.css *.js
+recursive-include scripts *.sh *.ps1 *.bash *.zsh
+recursive-exclude tests *
+recursive-exclude docs *

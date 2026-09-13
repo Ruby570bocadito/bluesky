@@ -31,11 +31,14 @@ try:
 except ImportError:
     RICH_AVAILABLE = False
 
+from bluesky import __version__
 from bluesky.core.engine import ModuleEngine
 from bluesky.core.session import Session
 from bluesky.core.hardware import HardwareDetector
 from bluesky.core.reporter import Reporter
-from bluesky.utils.format import colorize, severity_icon, target_type_icon
+from bluesky.utils.format import (
+    ASCII_LOGO, colorize, severity_icon, target_type_icon,
+)
 from bluesky.utils.config import get_config, parse_key_value
 
 
@@ -43,6 +46,41 @@ class BlueskyConsole(cmd.Cmd):
     """Consola interactiva bluesky estilo Metasploit."""
 
     intro = ""
+
+    # Ayuda organizada por categorías (estilo msfconsole). Fuente única
+    # usada tanto por el render Rich como por el fallback en texto plano.
+    HELP_SECTIONS = [
+        ("Módulos", [
+            ("use <módulo>", "Seleccionar módulo de ataque/escaneo"),
+            ("back", "Deseleccionar el módulo actual"),
+            ("list", "Listar todos los módulos disponibles"),
+            ("search <palabra>", "Buscar por nombre, CVE o palabra clave"),
+            ("info [módulo]", "Info del módulo actual o específico"),
+            ("educate [módulo]", "Explicación didáctica: qué es, cómo funciona y cómo mitigarlo"),
+        ]),
+        ("Configuración", [
+            ("set <opción> <val>", "Configurar opción (TARGET, RHOST, ...)"),
+            ("show options", "Opciones del módulo actual"),
+            ("show targets", "Targets conocidos (favoritos y escaneos)"),
+            ("show advanced", "Info CVE, exploits y referencias"),
+            ("config show|set|save", "Configuración global de bluesky"),
+        ]),
+        ("Ejecución", [
+            ("run [target]", "Ejecutar el módulo actual"),
+            ("check [target]", "Verificar prerequisitos contra el target"),
+            ("scan [--ble|--classic]", "Escanear dispositivos Bluetooth cercanos"),
+            ("vuln <target>", "Análisis de vulnerabilidades del target"),
+            ("auto [target]", "Autopilot: scan → vuln → attack → report"),
+        ]),
+        ("Sesión y reportes", [
+            ("session list|save|load", "Gestionar sesiones de auditoría"),
+            ("report [--html|--json|--txt]", "Generar reporte de la sesión"),
+        ]),
+        ("Generales", [
+            ("help [comando]", "Mostrar esta ayuda"),
+            ("exit / quit", "Salir de la consola"),
+        ]),
+    ]
 
     def __init__(self):
         super().__init__()
@@ -66,10 +104,18 @@ class BlueskyConsole(cmd.Cmd):
             })
 
     def preloop(self):
-        """Mostrar intro al iniciar."""
+        """Mostrar banner de bienvenida (estilo msfconsole) al iniciar."""
         if self.console:
-            self.console.print(self.intro, style="bold cyan")
-            self._show_status_bar()
+            self.console.print()
+            self.console.print(ASCII_LOGO, style="bold cyan")
+            self.console.print(
+                f"  [bold]bluesky[/] [dim]v{__version__} · consola interactiva · "
+                f"{len(self.engine.list_modules())} módulos[/]"
+            )
+            self.console.print(
+                "[dim]  Úsalo solo en auditorías autorizadas · escribe 'help' para ver los comandos[/]"
+            )
+            self.console.print()
         else:
             print(self.intro)
 
@@ -85,16 +131,21 @@ class BlueskyConsole(cmd.Cmd):
         return self._get_prompt()
 
     def _show_status_bar(self):
-        """Muestra barra de estado."""
+        """Línea de estado compacta: UNA línea, sin panel.
+
+        Antes se pintaba un Panel completo en cada arranque y sumado al
+        resto de paneles rompía el layout de terminales bajas.
+        """
         if not self.console:
             return
-        mod_name = self.current_module or "(ninguno)"
-        target = self.module_target or "(no establecido)"
+        mod_name = self.current_module or "ninguno"
+        target = self.module_target or "no establecido"
         n_mods = len(self.engine.list_modules())
-        status = f"[bold]Módulo:[/] [cyan]{mod_name}[/]  "
-        status += f"[bold]Target:[/] [yellow]{target}[/]  "
-        status += f"[bold]Módulos:[/] [green]{n_mods}[/]"
-        self.console.print(Panel(status, style="dim"))
+        self.console.print(
+            f"[dim]Módulos:[/] [green]{n_mods}[/]"
+            f"  [dim]·  Módulo:[/] [cyan]{mod_name}[/]"
+            f"  [dim]·  Target:[/] [yellow]{target}[/]"
+        )
 
     # ─── Comandos principales ──────────────────────────────
 
@@ -112,7 +163,7 @@ class BlueskyConsole(cmd.Cmd):
     def do_use(self, arg):
         """use <módulo> - Seleccionar un módulo para usar"""
         if not arg:
-            print("  Uso: use <module_name>")
+            print("  Uso: use <módulo>")
             print("  Módulos disponibles:")
             self.do_list("")
             return
@@ -230,23 +281,24 @@ class BlueskyConsole(cmd.Cmd):
         error = result.get("error")
 
         if self.console:
-            # Panel principal
+            # Estado en UNA línea (antes: panel 'Resultado' + un panel
+            # adicional por cada mensaje → salida interminable).
             if result.get("success"):
-                self.console.print(Panel(
-                    "[green]Módulo ejecutado correctamente[/]",
-                    title="Resultado", border_style="green"
-                ))
+                self.console.print("[bold green]✔ Módulo ejecutado correctamente[/]")
             else:
-                self.console.print(Panel(
-                    "[yellow]Módulo completado con notas[/]",
-                    title="Resultado", border_style="yellow"
-                ))
+                self.console.print("[bold yellow]● Módulo completado con avisos[/]")
 
-            # Mostrar mensajes/vulnerabilidades
+            # Mensajes del módulo, sangrados y SIN interpretar markup:
+            # proceden de datos externos (dispositivos, módulos) y podrían
+            # contener corchetes que Rich trataría como estilos.
             for key in ("message", "warning", "summary", "risk", "info", "help"):
                 val = data.get(key)
                 if val and isinstance(val, str) and len(val) > 3:
-                    self.console.print(Panel(val, border_style="dim"))
+                    for line in val.split("\n"):
+                        if line.strip():
+                            self.console.print(
+                                f"  {line.strip()}", markup=False, highlight=False
+                            )
 
             # Tabla de vulnerabilidades
             vulns = data.get("vulnerabilities", [])
@@ -266,11 +318,11 @@ class BlueskyConsole(cmd.Cmd):
             # Tabla de dispositivos
             devices = data.get("devices", [])
             if devices:
-                table = Table(title="Devices Found", border_style="blue")
+                table = Table(title=f"Dispositivos encontrados ({len(devices)})", border_style="blue")
                 table.add_column("#", style="dim")
-                table.add_column("Name", style="cyan")
+                table.add_column("Nombre", style="cyan")
                 table.add_column("MAC", style="green")
-                table.add_column("Type", style="yellow")
+                table.add_column("Tipo", style="yellow")
                 for i, d in enumerate(devices, 1):
                     table.add_row(
                         str(i),
@@ -283,10 +335,10 @@ class BlueskyConsole(cmd.Cmd):
             # Dispositivos vulnerables
             vdevs = data.get("vulnerable_devices", [])
             if vdevs:
-                table = Table(title="Vulnerable Devices", border_style="red")
-                table.add_column("Device", style="cyan")
+                table = Table(title="Dispositivos vulnerables", border_style="red")
+                table.add_column("Dispositivo", style="cyan")
                 table.add_column("MAC", style="green")
-                table.add_column("Risk", style="bold")
+                table.add_column("Riesgo", style="bold")
                 for vd in vdevs:
                     table.add_row(
                         vd.get("name", "?"),
@@ -706,7 +758,7 @@ class BlueskyConsole(cmd.Cmd):
             scan_type = "classic"
 
         if self.console:
-            with self.console.status(f"[bold cyan]Scanning {scan_type.upper()} devices..."):
+            with self.console.status(f"[bold cyan]Escaneando dispositivos ({scan_type.upper()})..."):
                 scanner = DeviceScanner(options={"type": scan_type, "timeout": str(timeout)})
                 result = scanner.run()
         else:
@@ -719,12 +771,12 @@ class BlueskyConsole(cmd.Cmd):
             self.targets_cache = devices
 
             if self.console:
-                table = Table(title=f"Devices Found ({len(devices)})", border_style="green")
+                table = Table(title=f"Dispositivos encontrados ({len(devices)})", border_style="green")
                 table.add_column("#", style="dim")
-                table.add_column("Name", style="cyan")
+                table.add_column("Nombre", style="cyan")
                 table.add_column("MAC", style="green")
-                table.add_column("Type", style="yellow")
-                table.add_column("Vendor", style="magenta")
+                table.add_column("Tipo", style="yellow")
+                table.add_column("Fabricante", style="magenta")
                 table.add_column("RSSI", style="dim")
                 for i, d in enumerate(devices, 1):
                     info = d.get("info", {})
@@ -912,57 +964,38 @@ class BlueskyConsole(cmd.Cmd):
         """help [comando] - Mostrar ayuda"""
         if arg:
             super().do_help(arg)
+            return
+
+        if self.console:
+            # Render con tablas Rich reales. ANTES este bloque envolvía
+            # markup Rich en rich.markdown.Markdown(), que NO interpreta
+            # estilos: el usuario veía los tags '[bold cyan]...[/]' como
+            # texto literal y la caja quedaba rota.
+            tbl = Table(box=None, show_header=False, padding=(0, 2), pad_edge=False)
+            tbl.add_column(no_wrap=True)   # comando
+            tbl.add_column()               # descripción
+            n_sections = len(self.HELP_SECTIONS)
+            for i, (title, rows) in enumerate(self.HELP_SECTIONS):
+                tbl.add_row(f"[bold magenta]{title}[/]", "")
+                for c, d in rows:
+                    tbl.add_row(f"  [cyan]{c}[/]", d)
+                if i < n_sections - 1:
+                    tbl.add_row("", "")
+            self.console.print(
+                Panel(
+                    tbl,
+                    title=f"[bold cyan]bluesky v{__version__} — comandos[/]",
+                    border_style="cyan",
+                    padding=(0, 1),
+                )
+            )
         else:
-            help_text = """
-            [bold cyan]╔══════════════════════════════════════════╗[/]
-            [bold cyan]║     BLUESKY CONSOLE - METASPLOIT MODE  ║[/]
-            [bold cyan]╚══════════════════════════════════════════╝[/]
-
-            [bold]Navegación y Búsqueda[/]
-              [cyan]use <módulo>[/]       Seleccionar módulo de ataque/escaneo
-              [cyan]back[/]                Deseleccionar módulo actual
-              [cyan]list[/]                Listar todos los módulos disponibles
-              [cyan]search <palabra>[/]    Buscar módulos por nombre, CVE, keyword
-              [cyan]info [módulo][/]        Info del módulo actual o específico
-
-            [bold]Configuración[/]
-              [cyan]set <opción> <val>[/]   Configurar opción (TARGET, RHOST, etc.)
-              [cyan]show options[/]         Mostrar opciones del módulo actual
-              [cyan]show targets[/]         Mostrar targets conocidos
-              [cyan]show advanced[/]        Mostrar info CVE, exploits, referencias
-
-            [bold]Ejecución[/]
-              [cyan]run [target][/]          Ejecutar módulo actual
-              [cyan]check [target][/]        Verificar prerequisitos contra target
-              [cyan]scan [--ble|--classic][/] Escanear dispositivos Bluetooth
-              [cyan]vuln <target>[/]         Escanear vulnerabilidades Bluetooth
-              [cyan]auto [target][/]         Autopilot: scan → vuln → attack → report
-
-            [bold]Sesión y Reportes[/]
-              [cyan]session list[/]          Listar sesiones guardadas
-              [cyan]session save <name>[/]   Guardar sesión actual
-              [cyan]session load <name>[/]   Cargar sesión
-              [cyan]report [--html|--json][/] Generar reporte
-
-            [bold]Configuración Global[/]
-              [cyan]config show[/]           Mostrar configuración actual
-              [cyan]config set <kv>[/]       Cambiar valor (ej: general.timeout=60)
-              [cyan]config save[/]           Persistir cambios a disco
-              [cyan]config reset[/]          Restaurar valores por defecto
-
-            [bold]Aprendizaje[/]
-              [cyan]educate [módulo][/]     Explicación paso a paso: qué es, cómo funciona y cómo MITIGAR cada ataque
-
-            [bold]Generales[/]
-              [cyan]help[/]                 Mostrar esta ayuda
-              [cyan]exit / quit[/]          Salir de la consola
-            """
-
-            if self.console:
-                from rich.markdown import Markdown
-                self.console.print(Panel(Markdown(help_text), border_style="cyan"))
-            else:
-                print(help_text)
+            # Fallback texto plano alineado, sin markup de ningún tipo
+            for title, rows in self.HELP_SECTIONS:
+                print(f"\n  {title}")
+                for c, d in rows:
+                    print(f"    {c:<30} {d}")
+            print()
 
     def do_exit(self, arg):
         """exit - Salir de bluesky Console"""

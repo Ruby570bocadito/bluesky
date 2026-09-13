@@ -863,6 +863,19 @@ def run_web_server(port: int = 5000, host: str = "127.0.0.1", debug: bool = Fals
         print("  Instala: pip install flask")
         return
 
+    # Guard de instalación: si las plantillas no viajan con el paquete
+    # (instalación rota, copia manual a site-packages, etc.), el fallo
+    # llegaría como TemplateNotFound en plena petición. Fallar AQUÍ con
+    # un mensaje accionable es mucho más útil para el usuario.
+    _templates_dir = Path(__file__).parent / "templates"
+    if not (_templates_dir / "index.html").is_file():
+        print("  ❌ La instalación de bluesky está incompleta: faltan las")
+        print("     plantillas del dashboard web (bluesky/web/templates).")
+        print("  Solución: reinstala el paquete completo ->")
+        print("     pip install --force-reinstall bluesky")
+        print(f"  (se buscó en: {_templates_dir})")
+        return
+
     # Si host no es localhost y no se proporciona token, mostrar warning
     # de seguridad (cualquiera en la red puede operar el dashboard).
     if host not in ("127.0.0.1", "localhost", "::1") and not auth_token:

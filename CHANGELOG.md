@@ -4,6 +4,45 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.6.1] - 2026-09-14
+
+### Corregido
+
+- **`bluesky web` fallaba con `TemplateNotFound: index.html`** tras instalar
+  con pip. Causa raíz: el paquete no incluía los datos no-Python —
+  `setup.py` carecía de `package_data`/`include_package_data`, así que
+  `bluesky/web/templates/*.html` y `bluesky/web/static/*` jamás llegaban a
+  `site-packages`. Añadido `package_data` explícito + `MANIFEST.in`; verificado
+  construyendo el wheel y comprobando que templates/ y static/ viajan dentro.
+- **Guard de instalación en `run_web_server`**: si la instalación sigue rota
+  (copia manual a site-packages, etc.), ahora se muestra un mensaje accionable
+  ("reinstala el paquete") en lugar de un traceback `TemplateNotFound` en
+  plena petición HTTP.
+- **Ayuda de la consola con markup Rich literal**: `do_help` envolvía texto
+  con estilos (`[bold cyan]...[/]`) en `rich.markdown.Markdown()`, que no
+  interpreta markup — el usuario veía los tags como texto crudo dentro del
+  panel. Reescrita como tablas Rich reales agrupadas por categorías, con
+  fallback en texto plano alineado sin markup.
+
+### Cambiado
+
+- **Consola y CLI más profesionales (estilo msfconsole):**
+  - Banner ASCII (logo compartido `ASCII_LOGO` en `utils/format.py`, fuente
+    única para CLI y consola) con versión, nº de módulos y aviso de uso
+    autorizado al entrar en `bluesky console`.
+  - Barra de estado de la consola reducida de Panel a una única línea.
+  - Resultado de módulos compactado: estado en una línea + mensajes
+    sangrados (con `markup=False` para no interpretar corchetes de datos
+    externos) en lugar de un panel por cada clave del resultado.
+  - Salida de la consola 100% en español (tablas "Dispositivos
+    encontrados", "Dispositivos vulnerables", columnas y mensajes sueltos).
+- **Logging silencioso por defecto + `--verbose`**: los avisos de
+  dependencias opcionales que cada módulo emitía por logging al importarse
+  ("scapy no instalado - X deshabilitado", warnings de libpcap...) ya no
+  ensucian la terminal al arrancar; esa información está disponible en la
+  UI (`list`, `info`, `check`). Con `-v/--verbose` se recuperan los
+  warnings/debug del framework.
+
 ## [0.6.0] - 2026-09-13
 
 ### Cambiado — "código real, cero simulación"

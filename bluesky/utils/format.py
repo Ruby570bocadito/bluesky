@@ -53,6 +53,19 @@ def colorize(text: str, color: str) -> str:
     return f"{c}{text}{reset}"
 
 
+# Logotipo ASCII compartido por el CLI (`bluesky ...`) y la consola
+# interactiva (`bluesky console`). Fuente figlet 'slant'. ÚNICA fuente de
+# verdad: si cambia el logo, cambia para ambas interfaces a la vez.
+ASCII_LOGO = r"""
+    __    __                __
+   / /_  / /_  _____  _____/ /____  __
+  / __ \/ / / / / _ \/ ___/ //_/ / / /
+ / /_/ / / /_/ /  __(__  ) ,< / /_/ /
+/_.___/_/\__,_/\___/____/_/|_|\__, /
+                             /____/
+""".strip("\n")
+
+
 # Mapa canónico de severidad → icono. ÚNICA fuente de verdad del proyecto:
 # usar severity_icon() en lugar de definir mapas locales (antes existían
 # copias divergentes en vuln_scanner y bias con colores intercambiados).
