@@ -20,14 +20,14 @@
 
 ## Demo
 
+<p align="center">
+  <img src="docs/assets/demo_cli.gif" alt="Live bluesky CLI session — module intel, offline OUI lookup and educational mode" width="730">
+</p>
+<p align="center"><em>Live CLI (v0.6.0): module intel for KNOB, 100% offline OUI vendor lookup and the educational mode — real output, nothing staged.</em></p>
+
 ![bluesky demo: real CLI and web dashboard session](docs/assets/demo_bluesky.mp4)
 
-<p align="center"><em>Real session — module catalog, OUI lookup, educational mode and web dashboard (33 s) · <a href="docs/assets/demo_bluesky.mp4">open the video</a></em></p>
-
-<p align="center">
-  <img src="docs/assets/demo_cli.gif" alt="GIF — real bluesky CLI session" width="660">
-</p>
-<p align="center"><em>CLI session: module catalog, OUI vendor lookup and educational mode.</em></p>
+<p align="center"><em>Full session — module catalog, OUI lookup, educational mode and web dashboard (33 s) · <a href="docs/assets/demo_bluesky.mp4">open the video</a></em></p>
 
 ## What is bluesky?
 
@@ -38,6 +38,16 @@
 It is designed as a **training and authorized-audit tool**: every module ships with an educational mode that explains what it does, how it works step by step and how to mitigate it. The web dashboard and the module catalog are 100% offline — no CDNs, no external calls.
 
 > ⚠️ **Ethical use.** Run bluesky only against devices and networks you have explicit written permission to test. The author is not responsible for misuse.
+
+## How it works
+
+From discovery to evidence in four phases — each step feeds the next, everything is recorded into the session, and the whole audit can be driven by a single command:
+
+<p align="center">
+  <img src="docs/assets/pipeline.png" alt="bluesky pipeline: scan → detect → attack → report" width="100%">
+</p>
+
+Autopilot picks modules automatically based on the vulnerabilities it finds (`detect` only reports, `attack` chains modules against a target, `full` runs the end-to-end audit) and every module can still be run à la carte from the CLI, the REPL console or the web dashboard.
 
 ## Features
 
