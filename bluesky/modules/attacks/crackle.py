@@ -593,14 +593,25 @@ class Crackle(BaseModule):
     # ─── Prerrequisitos ──────────────────────────────────────────────────────
 
     def check_prerequisites(self) -> Tuple[bool, str]:
-        """Verifica dependencias."""
-        # Validación MAC global (BaseModule)
-        ok, msg = super().check_prerequisites()
-        if not ok:
-            return False, msg
-        missing = []
+        """Verifica dependencias.
+
+        scapy NO es obligatorio: si no está, se usa modo simulación
+        (análisis offline con PCAP_FILE o modo educativo). Solo se
+        requiere scapy para captura en vivo (EXECUTE=True).
+        """
+        # Validación MAC global (BaseModule) — Crackle tiene TARGET opcional
+        # (para filtrado), así que no se exige target presente.
+        from bluesky.core.engine import is_valid_mac
+        target_value = self.target or (self.options.get("TARGET", "") if self.options else "")
+        if target_value and not is_valid_mac(target_value):
+            return False, (
+                f"Target '{target_value}' no tiene formato MAC válido "
+                "(XX:XX:XX:XX:XX:XX)."
+            )
+
+        # scapy no es blocking (modo simulación disponible)
         if not SCAPY_AVAILABLE:
-            missing.append("scapy (pip install scapy)")
-        if missing:
-            return False, f"Faltan: {', '.join(missing)}"
+            import logging
+            logging.getLogger("bluesky.crackle").warning(
+                "scapy no instalado - usando modo simulación/offline")
         return True, ""

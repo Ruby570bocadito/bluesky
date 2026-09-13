@@ -608,36 +608,60 @@ class VulnScanner(BaseModule):
 
     def _generate_report(self, target: str, all_vulns: List[dict],
                          found: List[dict], device_info: dict) -> str:
-        """Genera un reporte HTML."""
+        """Genera un reporte HTML.
+
+        Todos los datos dinámicos (nombres de dispositivo, MACs, IDs de
+        vulnerabilidad, evidencia, recomendaciones) se escapan con
+        utils.format.esc() antes de interpolarse. Sin esto, un
+        dispositivo Bluetooth con nombre hostil como '<script>...</script>'
+        ejecutaría JS al abrir el reporte en el navegador. Es el mismo
+        vector XSS que ya se corrigió en Reporter.to_html() y
+        Autopilot._phase_report().
+        """
         from pathlib import Path
+        from bluesky.utils.format import esc
 
         report_dir = Path("reports")
         report_dir.mkdir(exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = report_dir / f"vuln_scan_{target.replace(':', '')}_{timestamp}.html"
+        # Sanea target para usarlo en el nombre del archivo (defensa en
+        # profundidad: aunque la validación MAC de BaseModule ya bloquea
+        # inputs maliciosos, aseguramos que el filename sea seguro).
+        # Quitar path traversal, separadores y bytes nulos.
+        safe_target = target.replace(":", "").replace("/", "_").replace("\\", "_")
+        # Eliminar cualquier secuencia '..' que pudiera permitir path traversal
+        # en el filename (p.ej. 'reports/vuln_scan_.._.._tmp_evil.html').
+        while ".." in safe_target:
+            safe_target = safe_target.replace("..", "_")
+        report_path = report_dir / f"vuln_scan_{safe_target}_{timestamp}.html"
 
         # Construir HTML
-        critical = [v for v in found if v["severity"] == "critical"]
-        high = [v for v in found if v["severity"] == "high"]
+        critical = [v for v in found if v.get("severity") == "critical"]
+        high = [v for v in found if v.get("severity") == "high"]
+
+        # Whitelist para colores de severidad (evita inyección en style)
+        def _sev_color(sev: str) -> str:
+            return "#dc3545" if str(sev).lower() == "critical" else "#ffc107"
 
         vuln_rows = ""
         for v in found:
-            color = "#dc3545" if v["severity"] == "critical" else "#ffc107"
+            sev = v.get("severity", "medium")
+            color = _sev_color(sev)
             vuln_rows += f"""
             <tr>
-                <td><span style="color:{color};font-weight:bold">{v['id']}</span></td>
-                <td>{v['name']}</td>
-                <td>{v.get('cve', 'N/A')}</td>
-                <td><span style="color:{color}">{v['severity'].upper()}</span></td>
-                <td>{v.get('evidence', 'N/A')}</td>
-                <td><code>bluesky attack {v['module']} {target}</code></td>
+                <td><span style="color:{esc(color)};font-weight:bold">{esc(v.get('id', ''))}</span></td>
+                <td>{esc(v.get('name', ''))}</td>
+                <td>{esc(v.get('cve', 'N/A'))}</td>
+                <td><span style="color:{esc(color)}">{esc(str(sev).upper())}</span></td>
+                <td>{esc(v.get('evidence', 'N/A'))}</td>
+                <td><code>bluesky attack {esc(v.get('module', ''))} {esc(target)}</code></td>
             </tr>"""
 
         html = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>bluesky Vulnerability Report - {target}</title>
+    <title>bluesky Vulnerability Report - {esc(target)}</title>
     <style>
         body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a2e; color: #eee; margin: 0; padding: 20px; }}
         .container {{ max-width: 1200px; margin: auto; }}
@@ -659,21 +683,21 @@ class VulnScanner(BaseModule):
 <body>
 <div class="container">
     <h1>🛡️ bluesky Vulnerability Report</h1>
-    <p>Target: <strong>{device_info.get('name', 'Unknown')}</strong> ({target})</p>
-    <p>Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-    <p>Dispositivo: {device_info.get('class', 'Unknown')} | Fabricante: {device_info.get('manufacturer', 'Unknown')}</p>
+    <p>Target: <strong>{esc(device_info.get('name', 'Unknown'))}</strong> ({esc(target)})</p>
+    <p>Fecha: {esc(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))}</p>
+    <p>Dispositivo: {esc(device_info.get('class', 'Unknown'))} | Fabricante: {esc(device_info.get('manufacturer', 'Unknown'))}</p>
 
     <div class="stats">
         <div class="stat-card">
-            <div class="stat-number">{len(found)}</div>
+            <div class="stat-number">{esc(len(found))}</div>
             <div>Vulnerabilidades</div>
         </div>
         <div class="stat-card critical">
-            <div class="stat-number" style="color:#dc3545">{len(critical)}</div>
+            <div class="stat-number" style="color:#dc3545">{esc(len(critical))}</div>
             <div>Críticas</div>
         </div>
         <div class="stat-card high">
-            <div class="stat-number" style="color:#ffc107">{len(high)}</div>
+            <div class="stat-number" style="color:#ffc107">{esc(len(high))}</div>
             <div>Altas</div>
         </div>
     </div>
@@ -699,7 +723,7 @@ class VulnScanner(BaseModule):
     <ol>
 """
         for i, v in enumerate(found, 1):
-            html += f'        <li><code>bluesky attack {v["module"]} {target}</code> — {v["name"]}</li>\n'
+            html += f'        <li><code>bluesky attack {esc(v.get("module", ""))} {esc(target)}</code> — {esc(v.get("name", ""))}</li>\n'
 
         html += """
     </ol>

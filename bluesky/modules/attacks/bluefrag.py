@@ -791,13 +791,34 @@ class BlueFrag(BaseModule):
     # ─── Prerrequisitos ──────────────────────────────────────────────────────
 
     def check_prerequisites(self) -> Tuple[bool, str]:
-        """Verifica dependencias."""
-        # Validación MAC global (BaseModule)
-        ok, msg = super().check_prerequisites()
-        if not ok:
-            return False, msg
+        """Verifica dependencias.
+
+        El requisito de root es condicional al modo:
+          - MODE=info o MODE=scan: NO requieren root (solo lectura/simulación)
+          - MODE=exploit o MODE=dos: SÍ requieren root (envío de paquetes raw)
+        """
+        import os
+        # Validación MAC global (BaseModule) — pero el check de root del
+        # BaseModule lo vamos a omitir y re-validar aquí según el modo.
+        # Para eso, llamamos al check de MAC directamente sin pasar por
+        # el check de requires_root del padre.
+        from bluesky.core.engine import is_valid_mac
+        target_value = self.target or (self.options.get("TARGET", "") if self.options else "")
+        if target_value and not is_valid_mac(target_value):
+            return False, (
+                f"Target '{target_value}' no tiene formato MAC válido "
+                "(XX:XX:XX:XX:XX:XX)."
+            )
+
+        # Verificar root solo en modos que lo necesitan
+        mode = (self.options or {}).get("MODE", "scan").lower()
+        if mode in ("exploit", "dos"):
+            if os.name != "posix" or os.geteuid() != 0:
+                return False, (f"El módulo 'bluefrag' en modo '{mode}' requiere "
+                              "privilegios de root. Ejecuta con sudo.")
+
+        # Verificar dependencias (scapy opcional — modo simulación disponible)
         missing = []
-        # scapy no es obligatorio (modo simulación disponible)
         if not SCAPY_AVAILABLE:
             log.warning("scapy no instalado - usando simulación")
         if missing:

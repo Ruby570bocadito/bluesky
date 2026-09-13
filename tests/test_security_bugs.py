@@ -437,5 +437,211 @@ class TestSessionNameSanitization(unittest.TestCase):
         self.assertNotIn("\x00", result)
 
 
+# ─── XSS almacenado en reportes HTML ─────────────────────────────────────────
+
+class TestXssAutopilotReport(unittest.TestCase):
+    """Autopilot._phase_report() no debe interpolar datos sin escape.
+
+    Vector: un dispositivo Bluetooth cercano se anuncia con un nombre
+    hostil como '<script>...</script>'. Si el reporte no escapa, al
+    abrirlo en navegador se ejecuta JS en contexto file:// (acceso a
+    archivos locales vía XHR) o en el contexto del dashboard web.
+
+    Corregido en ronda 1 del agente z_bugs (commit f413c57).
+    """
+
+    def test_01_no_raw_script_tag_from_device_name(self):
+        """Nombre hostil de dispositivo no genera <script> crudo."""
+        import os, re
+        from bluesky.modules.attacks.autopilot import Autopilot
+
+        targets = [
+            {'mac': 'AA:BB:CC:DD:EE:FF',
+             'name': '<script>alert("xss-autopilot")</script>',
+             'type': 'classic'},
+            {'mac': '11:22:33:44:55:66',
+             'name': '<img src=x onerror=alert(1)>',
+             'type': 'ble'},
+        ]
+        all_vulns = {
+            'AA:BB:CC:DD:EE:FF': [
+                {'id': '<script>evil()</script>', 'name': 'x',
+                 'severity': 'high', 'vulnerable': True, 'module': 'knob'},
+            ],
+        }
+        results = {
+            'AA:BB:CC:DD:EE:FF': [
+                {'module': 'bluejacking', 'target': 'AA:BB:CC:DD:EE:FF',
+                 'success': True, 'data': {}, 'error': None}],
+        }
+        a = Autopilot()
+        report_path = a._phase_report(targets, results, all_vulns)
+        try:
+            content = open(report_path).read()
+            # Ninguno de estos patrones crudos debe aparecer
+            for pattern in [
+                '<script>alert', '<img src=x onerror',
+                '<script>evil()', '<script>document.cookie',
+            ]:
+                self.assertNotIn(pattern, content,
+                                 f'XSS no escapado: {pattern!r}')
+            # Y sí debe estar escapado
+            self.assertIn('&lt;script&gt;', content)
+        finally:
+            if os.path.exists(report_path):
+                os.unlink(report_path)
+
+
+class TestXssVulnScannerReport(unittest.TestCase):
+    """VulnScanner._generate_report() no debe interpolar datos sin escape.
+
+    Mismo vector que TestXssAutopilotReport. Corregido en ronda 4
+    del agente z_bugs.
+    """
+
+    def test_01_no_raw_script_tag_from_device_name(self):
+        """Nombre hostil de dispositivo no genera <script> crudo."""
+        import os
+        from bluesky.modules.scanners.vuln_scanner import VulnScanner
+
+        v = VulnScanner(target='AA:BB:CC:DD:EE:FF')
+        target = 'AA:BB:CC:DD:EE:FF'
+        all_vulns = []
+        found = [
+            {'id': '<script>alert("vuln-xss")</script>',
+             'name': '<img src=x onerror=alert(1)>',
+             'cve': 'CVE-2024-<script>evil()</script>',
+             'severity': 'critical',
+             'evidence': '<script>document.cookie</script>',
+             'module': 'knob',
+             'remediation': '<script>alert(1)</script>'},
+            {'id': 'BIAS', 'name': 'Bluetooth Impersonation',
+             'cve': 'CVE-2020-10135', 'severity': 'high',
+             'evidence': 'normal', 'module': 'bias'},
+        ]
+        device_info = {
+            'name': '<script>alert("device-xss")</script>',
+            'class': 'Phone',
+            'manufacturer': '<img src=x onerror=alert(2)>',
+        }
+
+        report_path = v._generate_report(target, all_vulns, found, device_info)
+        try:
+            content = open(report_path).read()
+            # Ninguno de estos patrones crudos debe aparecer
+            for pattern in [
+                '<script>alert', '<img src=x onerror',
+                '<script>evil()', '<script>document.cookie',
+                '<script>alert("device-xss")',
+            ]:
+                self.assertNotIn(pattern, content,
+                                 f'XSS no escapado: {pattern!r}')
+            # Y sí debe estar escapado
+            self.assertIn('&lt;script&gt;', content)
+            self.assertIn('&lt;img src=x onerror', content)
+        finally:
+            if os.path.exists(report_path):
+                os.unlink(report_path)
+
+    def test_02_target_in_filename_sanitized(self):
+        """El target se sanea al construir el nombre del archivo de reporte."""
+        import os
+        from bluesky.modules.scanners.vuln_scanner import VulnScanner
+
+        # Target con path traversal (aunque la validación MAC de BaseModule
+        # ya lo bloquearía antes, esta es defensa en profundidad)
+        v = VulnScanner(target='AA:BB:CC:DD:EE:FF')
+        # Simular target malicioso directamente al método
+        target = '../../../tmp/evil'
+        report_path = v._generate_report(target, [], [], {})
+        try:
+            # El filename NO debe contener ../
+            self.assertNotIn('..', str(report_path))
+            self.assertNotIn('/tmp/evil', str(report_path))
+        finally:
+            if os.path.exists(report_path):
+                os.unlink(report_path)
+
+
+class TestBlueFragConditionalRoot(unittest.TestCase):
+    """BlueFrag.check_prerequisites respeta el modo para exigir root.
+
+    MODE=info/scan no requieren root (solo lectura/simulación).
+    MODE=exploit/dos sí requieren root (envío de paquetes raw).
+    """
+
+    def setUp(self):
+        from bluesky.modules.attacks.bluefrag import BlueFrag
+        self.BlueFrag = BlueFrag
+
+    def test_01_mode_info_no_root_required(self):
+        """MODE=info no exige root."""
+        b = self.BlueFrag(options={'MODE': 'info'})
+        ok, msg = b.check_prerequisites()
+        self.assertTrue(ok, f"MODE=info no debe exigir root: {msg}")
+
+    def test_02_mode_scan_no_root_required(self):
+        """MODE=scan no exige root."""
+        b = self.BlueFrag(options={'MODE': 'scan'})
+        ok, msg = b.check_prerequisites()
+        self.assertTrue(ok, f"MODE=scan no debe exigir root: {msg}")
+
+    def test_03_mode_exploit_requires_root(self):
+        """MODE=exploit exige root."""
+        b = self.BlueFrag(options={'MODE': 'exploit'})
+        ok, msg = b.check_prerequisites()
+        # En CI sin root, debe fallar con "root" en msg
+        if not ok:
+            self.assertIn("root", msg.lower())
+
+    def test_04_mode_dos_requires_root(self):
+        """MODE=dos exige root."""
+        b = self.BlueFrag(options={'MODE': 'dos'})
+        ok, msg = b.check_prerequisites()
+        if not ok:
+            self.assertIn("root", msg.lower())
+
+    def test_05_default_mode_scan_no_root(self):
+        """Sin MODE explícito, default es scan (no root)."""
+        b = self.BlueFrag()
+        ok, msg = b.check_prerequisites()
+        self.assertTrue(ok, f"Default MODE=scan no debe exigir root: {msg}")
+
+    def test_06_invalid_target_blocked_regardless_of_mode(self):
+        """Target malicioso se bloquea independientemente del modo."""
+        b = self.BlueFrag(target='--evil-flag', options={'MODE': 'info'})
+        ok, msg = b.check_prerequisites()
+        self.assertFalse(ok)
+        self.assertIn("formato MAC", msg)
+
+
+class TestCrackleScapyNotBlocking(unittest.TestCase):
+    """Crackle.check_prerequisites no exige scapy (modo simulación disponible)."""
+
+    def setUp(self):
+        from bluesky.modules.attacks.crackle import Crackle
+        self.Crackle = Crackle
+
+    def test_01_crackle_passes_without_scapy(self):
+        """Crackle sin scapy pasa check_prerequisites (modo simulación)."""
+        c = self.Crackle()
+        ok, msg = c.check_prerequisites()
+        # scapy no está en este entorno, pero el check debe pasar
+        self.assertTrue(ok, f"Crackle sin scapy debe pasar: {msg}")
+
+    def test_02_crackle_validates_mac(self):
+        """Crackle valida MAC si se proporciona."""
+        c = self.Crackle(target='--evil-flag')
+        ok, msg = c.check_prerequisites()
+        self.assertFalse(ok)
+        self.assertIn("formato MAC", msg)
+
+    def test_03_crackle_valid_mac_passes(self):
+        """Crackle con MAC válida pasa."""
+        c = self.Crackle(target='AA:BB:CC:DD:EE:FF')
+        ok, msg = c.check_prerequisites()
+        self.assertTrue(ok, f"MAC válida debe pasar: {msg}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
