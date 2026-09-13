@@ -212,6 +212,200 @@ class TestApiEndpoints:
         assert rv.status_code == 200
 
 
+class TestScanApiOptions:
+    """POST /api/scan con opciones de escaneo (modo, timeout, validación)."""
+
+    class _FakeEngine:
+        """Engine determinista para probar el endpoint sin hardware."""
+
+        calls = []
+
+        def list_modules(self):
+            return []
+
+        def run_module(self, name, target="", options=None):
+            TestScanApiOptions._FakeEngine.calls.append((name, target, options))
+            return {
+                "success": True,
+                "data": {"devices": [{
+                    "mac": "B8:27:EB:12:34:56", "name": "pi", "type": "classic",
+                    "vendor": "Raspberry Pi Trading", "rssi": -50,
+                }]},
+                "error": None,
+            }
+
+    @pytest.fixture(autouse=True)
+    def _fake_engine(self, app):
+        """Sustituye el engine real durante cada test y lo restaura."""
+        original = app.state["engine"]
+        TestScanApiOptions._FakeEngine.calls = []
+        app.state["engine"] = TestScanApiOptions._FakeEngine()
+        with app.state["lock"]:
+            app.state["scan_results"] = []
+            app.state["scan_in_progress"] = False
+        yield
+        app.state["engine"] = original
+        with app.state["lock"]:
+            app.state["scan_in_progress"] = False
+
+    def _wait_scan_done(self, app, timeout=2.0):
+        import time
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            with app.state["lock"]:
+                if not app.state["scan_in_progress"]:
+                    return True
+            time.sleep(0.02)
+        return False
+
+    def test_scan_con_modo_y_timeout(self, app, client):
+        """POST /api/scan {type: ble, timeout: 12} -> options llegan al engine."""
+        rv = client.post("/api/scan",
+                         data=json.dumps({"scanner": "device", "type": "ble",
+                                          "timeout": 12}),
+                         content_type="application/json")
+        assert rv.status_code == 200
+        assert self._wait_scan_done(app)
+        name, target, options = self._FakeEngine.calls[-1]
+        assert name == "scan"
+        assert options == {"type": "ble", "timeout": "12"}
+
+    def test_scan_sin_opciones_usa_defaults(self, app, client):
+        """POST /api/scan sin type/timeout -> options solo con type=all."""
+        rv = client.post("/api/scan", data=json.dumps({"scanner": "device"}),
+                         content_type="application/json")
+        assert rv.status_code == 200
+        assert self._wait_scan_done(app)
+        name, _, options = self._FakeEngine.calls[-1]
+        assert options == {"type": "all"}
+
+    def test_scan_tipo_invalido_400(self, client):
+        rv = client.post("/api/scan",
+                         data=json.dumps({"scanner": "device", "type": "wifi"}),
+                         content_type="application/json")
+        assert rv.status_code == 400
+        data = json.loads(rv.data)
+        assert "error" in data
+
+    def test_scan_timeout_no_numerico_400(self, client):
+        rv = client.post("/api/scan",
+                         data=json.dumps({"scanner": "device", "timeout": "abc"}),
+                         content_type="application/json")
+        assert rv.status_code == 400
+
+    def test_scan_timeout_fuera_de_rango_400(self, client):
+        rv = client.post("/api/scan",
+                         data=json.dumps({"scanner": "device", "timeout": 999}),
+                         content_type="application/json")
+        assert rv.status_code == 400
+
+    def test_scan_timeout_negativo_400(self, client):
+        rv = client.post("/api/scan",
+                         data=json.dumps({"scanner": "device", "timeout": 0}),
+                         content_type="application/json")
+        assert rv.status_code == 400
+
+    def test_scanner_invalido_400(self, client):
+        rv = client.post("/api/scan",
+                         data=json.dumps({"scanner": "brute-force"}),
+                         content_type="application/json")
+        assert rv.status_code == 400
+
+    def test_services_sin_target_400(self, client):
+        """El escáner de servicios exige MAC: sin ella, error 400 (no crash)."""
+        rv = client.post("/api/scan",
+                         data=json.dumps({"scanner": "services", "target": ""}),
+                         content_type="application/json")
+        assert rv.status_code == 400
+        data = json.loads(rv.data)
+        assert "message" in data
+
+    def test_services_con_target_pasa_options_vacias(self, app, client):
+        rv = client.post("/api/scan",
+                         data=json.dumps({"scanner": "services",
+                                          "target": "AA:BB:CC:DD:EE:FF"}),
+                         content_type="application/json")
+        assert rv.status_code == 200
+        assert self._wait_scan_done(app)
+        name, target, options = self._FakeEngine.calls[-1]
+        assert name == "services"
+        assert target == "AA:BB:CC:DD:EE:FF"
+        assert options == {}
+
+    def test_scan_resultado_con_dispositivos(self, app, client):
+        """El estado expone los dispositivos descubiertos (para la web)."""
+        client.post("/api/scan", data=json.dumps({"scanner": "device"}),
+                    content_type="application/json")
+        assert self._wait_scan_done(app)
+        rv = client.get("/api/scan/status")
+        data = json.loads(rv.data)
+        found = False
+        for r in data["recent_results"]:
+            devices = (r.get("result") or {}).get("data", {}).get("devices", [])
+            if devices:
+                found = True
+                assert devices[0]["vendor"] == "Raspberry Pi Trading"
+        assert found, "los dispositivos deben viajar en el resultado"
+
+
+class TestScanExport:
+    """GET /api/scan/export -> CSV de los dispositivos del último escaneo."""
+
+    def test_export_sin_datos_404(self, app, client):
+        with app.state["lock"]:
+            app.state["scan_results"] = []
+        rv = client.get("/api/scan/export")
+        assert rv.status_code == 404
+        data = json.loads(rv.data)
+        assert "error" in data
+
+    def test_export_con_dispositivos_csv(self, app, client):
+        with app.state["lock"]:
+            app.state["scan_results"] = [{
+                "module": "device", "target": "broadcast", "time": "10:00:00",
+                "success": True,
+                "result": {"success": True, "data": {"devices": [
+                    {"mac": "B8:27:EB:12:34:56", "name": "pi", "type": "classic",
+                     "vendor": "Raspberry Pi Trading", "rssi": -50},
+                    {"mac": "00:1A:7D:99:88:77", "name": "csr", "type": "ble"},
+                ]}, "error": None},
+            }]
+        try:
+            rv = client.get("/api/scan/export")
+            assert rv.status_code == 200
+            assert rv.mimetype == "text/csv"
+            assert "attachment" in rv.headers.get("Content-Disposition", "")
+            assert b"bluesky_devices.csv" in rv.headers.get(
+                "Content-Disposition", "").encode()
+            body = rv.data.decode("utf-8")
+            assert body.startswith("mac,name,type,vendor,rssi,paired")
+            assert "B8:27:EB:12:34:56" in body
+            assert "Raspberry Pi Trading" in body
+        finally:
+            with app.state["lock"]:
+                app.state["scan_results"] = []
+
+    def test_export_ignora_resultados_sin_dispositivos(self, app, client):
+        """Busca el último escaneo CON dispositivos, no solo el último run."""
+        with app.state["lock"]:
+            app.state["scan_results"] = [
+                {"module": "device", "target": "broadcast", "time": "10:00:00",
+                 "success": True,
+                 "result": {"success": True, "data": {"devices": [
+                     {"mac": "AA:BB:CC:DD:EE:FF", "name": "viejo"}]}, "error": None}},
+                {"module": "services", "target": "AA:BB:CC:DD:EE:FF",
+                 "time": "11:00:00", "success": False,
+                 "result": {"success": False, "data": {}, "error": "x"}},
+            ]
+        try:
+            rv = client.get("/api/scan/export")
+            assert rv.status_code == 200
+            assert "AA:BB:CC:DD:EE:FF" in rv.data.decode("utf-8")
+        finally:
+            with app.state["lock"]:
+                app.state["scan_results"] = []
+
+
 class TestWebCLICommand:
     """Tests del comando CLI 'web'."""
 

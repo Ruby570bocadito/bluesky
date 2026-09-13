@@ -45,8 +45,9 @@
     <table>
       <thead><tr><th style="width:90px">Método</th><th style="width:260px">Endpoint</th><th>Descripción</th></tr></thead>
       <tbody>
-        <tr><td><span class="badge accent">POST</span></td><td class="mono">/api/scan</td><td class="muted">Inicia un escaneo. Body: <code class="mono">{"scanner": "device" | "services", "target": "MAC"}</code></td></tr>
-        <tr><td><span class="badge ok">GET</span></td><td class="mono">/api/scan/status</td><td class="muted">Estado del escaneo y últimos resultados</td></tr>
+        <tr><td><span class="badge accent">POST</span></td><td class="mono">/api/scan</td><td class="muted">Inicia un escaneo. Body: <code class="mono">{"scanner": "device" | "services", "target": "MAC", "type": "all" | "ble" | "classic", "timeout": 1-60}</code>. La MAC es obligatoria para <code class="mono">services</code>; <code class="mono">type</code>/<code class="mono">timeout</code> solo aplican a <code class="mono">device</code>.</td></tr>
+        <tr><td><span class="badge ok">GET</span></td><td class="mono">/api/scan/status</td><td class="muted">Estado del escaneo y últimos resultados (incluye los dispositivos descubiertos)</td></tr>
+        <tr><td><span class="badge ok">GET</span></td><td class="mono">/api/scan/export</td><td class="muted">Descarga CSV con los dispositivos del último escaneo (cabeceras Content-Disposition)</td></tr>
       </tbody>
     </table>
   </div>

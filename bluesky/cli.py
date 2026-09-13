@@ -111,7 +111,7 @@ def print_help():
     _p()
     _p(f"{_c('AUDITORÍA', 'bold')}")
     rows = [
-        ("scan", "Escanear dispositivos Bluetooth cercanos (--ble | --classic)"),
+        ("scan", "Escanear dispositivos cercanos (--ble | --classic, --export CSV)"),
         ("services <MAC>", "Enumerar servicios SDP de un dispositivo"),
         ("vuln <MAC>", "Análisis de vulnerabilidades (13+ checks)"),
         ("attack <mod> [target]", "Ejecutar un módulo de ataque"),
@@ -162,6 +162,7 @@ def print_help():
     _p(f"{_c('EJEMPLOS', 'bold')}")
     for ex in [
         "bluesky scan --ble --timeout 12",
+        "bluesky scan --export dispositivos.csv",
         "bluesky attack bluejacking AA:BB:CC:DD:EE:FF",
         "bluesky vuln AA:BB:CC:DD:EE:FF",
         "bluesky auto --mode detect",
@@ -188,6 +189,8 @@ def cmd_scan(args: list):
     p.add_argument("--classic", action="store_true", help="escanear solo Bluetooth clásico")
     p.add_argument("--timeout", type=int, default=None, metavar="S",
                    help="duración del escaneo en segundos (default: valor de config)")
+    p.add_argument("--export", metavar="ARCHIVO", default=None,
+                   help="guardar los dispositivos descubiertos en ARCHIVO (.csv o .json)")
     p.add_argument("--json", action="store_true", help="salida JSON para scripting")
     ns = p.parse_args(args)
 
@@ -204,6 +207,10 @@ def cmd_scan(args: list):
         scanner = DeviceScanner(options={"type": scan_type, "timeout": str(timeout)})
         result = scanner.run()
         devices = result.get("data", {}).get("devices", []) if result.get("success") else []
+        if ns.export:
+            rc_export = _export_devices(ns.export, devices, quiet=True)
+            if rc_export != 0:
+                return rc_export
         _json_out({
             "success": result.get("success", False),
             "scan_type": scan_type,
@@ -235,16 +242,52 @@ def cmd_scan(args: list):
             info = dev.get("info", {}) if isinstance(dev.get("info"), dict) else {}
             rssi = info.get("rssi", "")
             paired = info.get("paired", False)
+            vendor = dev.get("vendor", "")
 
             ttype = _c(target_type_icon(dev_type), "reset")
             paired_str = f" {_c('(emparejado)', 'yellow')}" if paired else ""
             rssi_str = f" [{rssi} dBm]" if rssi else ""
-            _p(f"  {i:2d}. {ttype} {_c(name, 'cyan')} {_c(mac, 'dim')}{rssi_str}{paired_str}")
+            vendor_str = f" {_c('· ' + vendor, 'dim')}" if vendor else ""
+            _p(f"  {i:2d}. {ttype} {_c(name, 'cyan')} {_c(mac, 'dim')}{vendor_str}{rssi_str}{paired_str}")
+        if ns.export:
+            rc_export = _export_devices(ns.export, devices)
+            if rc_export != 0:
+                return rc_export
     else:
         msg = result.get("data", {}).get("message") or result.get("error") or "No se encontraron dispositivos"
         _p(f"  {_c('AVISO', 'yellow')} {msg}")
     _p()
     return 0 if result.get("success") else 1
+
+
+def _export_devices(path: str, devices: list, quiet: bool = False) -> int:
+    """Guarda la lista de dispositivos en CSV o JSON. 0 ok · 1 error de escritura."""
+    import io
+    from pathlib import Path as _Path
+    from bluesky.utils.csv_export import devices_to_csv
+
+    try:
+        out = _Path(path)
+        if str(out).lower().endswith(".json"):
+            payload = {"count": len(devices), "devices": devices}
+            out.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str),
+                           encoding="utf-8")
+        else:
+            # CSV por defecto (cualquier otra extensión), con BOM para Excel.
+            buf = io.StringIO()
+            buf.write("\ufeff")  # BOM utf-8-sig
+            buf.write(devices_to_csv(devices))
+            out.write_text(buf.getvalue(), encoding="utf-8")
+        if not quiet:
+            _p(f"  {_c('OK', 'green')} {len(devices)} dispositivo(s) exportados a {_c(str(out), 'cyan')}")
+        return 0
+    except OSError as e:
+        if not quiet:
+            _p(f"  {_c('ERROR', 'red')} no se pudo escribir {path}: {e}")
+        else:
+            # Modo --json: stdout debe seguir siendo JSON limpio
+            print(f"error: no se pudo escribir {path}: {e}", file=sys.stderr)
+        return 1
 
 
 # --------------------------------------------------------------- services

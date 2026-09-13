@@ -23,6 +23,18 @@
         <option value="services">Servicios SDP/GATT de un target</option>
       </select>
     </label>
+    <label class="field" id="scan-mode-field">
+      <span class="micro">Modo</span>
+      <select id="scan-mode">
+        <option value="all">Todos (Classic + BLE)</option>
+        <option value="ble">Solo BLE</option>
+        <option value="classic">Solo Classic</option>
+      </select>
+    </label>
+    <label class="field" id="scan-timeout-field">
+      <span class="micro">Timeout (s)</span>
+      <input type="number" id="scan-timeout" min="1" max="60" value="8">
+    </label>
     <label class="field">
       <span class="micro">Target (MAC opcional)</span>
       <input type="text" id="scan-target" placeholder="AA:BB:CC:DD:EE:FF">
@@ -33,6 +45,21 @@
     Solo escanea dispositivos propios o con autorización expresa. Sin hardware Bluetooth,
     el escaneo terminará con un aviso del adaptador.
   </p>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-title">Dispositivos descubiertos</div>
+  <div id="devices-empty" class="empty"><span class="big">🔎</span>Aún no hay dispositivos. Lanza un escaneo de dispositivos para verlos aquí, con su fabricante (OUI).</div>
+  <div class="table-wrap" id="devices-table" style="display:none">
+    <table>
+      <thead><tr><th>MAC</th><th>Nombre</th><th>Tipo</th><th>Fabricante</th><th>RSSI</th></tr></thead>
+      <tbody id="devices-body"></tbody>
+    </table>
+  </div>
+  <div class="form-row" style="margin-top:12px">
+    <button class="btn" id="scan-export" disabled>Exportar CSV</button>
+    <span class="faint" style="font-size:12px; align-self:center">Dispositivos del último escaneo, listos para hoja de cálculo</span>
+  </div>
 </div>
 
 <div class="card" style="margin-top:16px">

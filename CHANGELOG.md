@@ -4,6 +4,40 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.5.0] - 2026-09-13
+
+### Añadido
+
+- **Identificación de fabricante (OUI) para dispositivos descubiertos**:
+  nueva base OUI compartida y 100% offline (`bluesky/utils/oui.py`, 114
+  prefijos: Apple, Samsung, Raspberry Pi, CSR, Xiaomi, Google, Sony…).
+  `DeviceScanner` anota cada dispositivo con `vendor`, visible en CLI
+  (`scan`), consola REPL (columna Vendor), web y exportaciones. El
+  backend Termux ahora delega en la misma DB en lugar de mantener una
+  copia propia desincronizada.
+- **Exportación CSV/JSON de dispositivos**: `bluesky scan --export
+  dispositivos.csv` (con BOM utf-8-sig para Excel; `--export x.json`
+  para JSON). Compañero natural de `--json`: el entregable de
+  descubrimiento se guarda a archivo sin salir del flujo de escaneo.
+- **Web: tabla de dispositivos descubiertos en vivo** — la página de
+  escaneo ahora muestra MAC, nombre, tipo, fabricante (OUI) y RSSI de
+  cada dispositivo encontrado, con botón "Exportar CSV"
+  (`GET /api/scan/export`, descarga con Content-Disposition).
+- **Web: opciones de escaneo reales** — el formulario permite elegir
+  modo (Todos/BLE/Classic) y timeout (1-60 s), y `/api/scan` valida y
+  propaga `type`/`timeout` al escáner. El escáner de servicios exige
+  ahora MAC (400 con mensaje claro en lugar de lanzar un escaneo sin
+  objetivo).
+- 57 tests nuevos (349 total, 100% offline): lookup OUI, CSV export
+  (escaping, unicode, tolerancia a entradas malformadas), opciones y
+  validación de `/api/scan` y endpoint de exportación web.
+
+### Corregido
+
+- `web/app.py`: `/api/scan` ejecutaba el escáner sin `options` (siempre
+  "all" y timeout por defecto, ignorando la configuración) y aceptaba
+  `scanner=services` sin target.
+
 ## [0.4.0] - 2026-09-12
 
 ### Añadido

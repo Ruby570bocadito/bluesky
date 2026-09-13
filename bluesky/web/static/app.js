@@ -59,15 +59,35 @@
 
   var scanBtn = $("#scan-btn");
   if (scanBtn) {
+    // Mostrar/ocultar modo y timeout según el escáner elegido
+    var scanTypeSel = $("#scan-type");
+    function syncScanFields() {
+      var isDevice = !scanTypeSel || scanTypeSel.value === "device";
+      var modeField = $("#scan-mode-field");
+      var timeoutField = $("#scan-timeout-field");
+      if (modeField) modeField.style.display = isDevice ? "" : "none";
+      if (timeoutField) timeoutField.style.display = isDevice ? "" : "none";
+    }
+    if (scanTypeSel) {
+      scanTypeSel.addEventListener("change", syncScanFields);
+      syncScanFields();
+    }
+
     scanBtn.addEventListener("click", function () {
       var type = ($("#scan-type") || {}).value || "device";
       var target = ($("#scan-target") || {}).value || "";
+      var body = { scanner: type, target: target.trim() };
+      if (type === "device") {
+        body.type = ($("#scan-mode") || {}).value || "all";
+        var t = parseInt(($("#scan-timeout") || {}).value || "", 10);
+        if (!isNaN(t)) body.timeout = t;
+      }
       scanBtn.disabled = true;
       scanBtn.textContent = "Iniciando…";
       fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scanner: type, target: target })
+        body: JSON.stringify(body)
       })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (res) {
@@ -86,16 +106,83 @@
     });
   }
 
+  // Descarga del CSV con los dispositivos del último escaneo
+  var exportBtn = $("#scan-export");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", function () {
+      fetch("/api/scan/export")
+        .then(function (r) {
+          if (!r.ok) throw new Error("no disponible");
+          return r.blob();
+        })
+        .then(function (blob) {
+          var a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "bluesky_devices.csv";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(a.href);
+          toast("CSV exportado");
+        })
+        .catch(function () { toast("No hay dispositivos para exportar"); });
+    });
+  }
+
   function pollScanStatus() {}
 
-  function pollScanResults() {
+  function pollScanResults(opts) {
     fetch("/api/scan/status")
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d || !d.recent_results) return;
-        renderScanResults(d.recent_results.slice().reverse());
+        if (!opts || opts.runs !== false) {
+          renderScanResults(d.recent_results.slice().reverse());
+        }
+        renderDevicesFromResults(d.recent_results);
       })
       .catch(function () {});
+  }
+
+  // Extrae los dispositivos del resultado de escaneo más reciente que los tenga
+  function renderDevicesFromResults(results) {
+    for (var i = results.length - 1; i >= 0; i--) {
+      var r = results[i];
+      if (!r || !r.result || typeof r.result !== "object") continue;
+      var data = r.result.data;
+      if (!data || typeof data !== "object" || !Array.isArray(data.devices)) continue;
+      renderDevices(data.devices);
+      return;
+    }
+  }
+
+  function renderDevices(devices) {
+    var tbody = $("#devices-body");
+    var empty = $("#devices-empty");
+    var table = $("#devices-table");
+    var exportBtn = $("#scan-export");
+    if (!tbody || !table) return;
+    if (empty) empty.style.display = devices.length ? "none" : "";
+    table.style.display = devices.length ? "" : "none";
+    if (exportBtn) exportBtn.disabled = !devices.length;
+
+    tbody.textContent = "";
+    devices.forEach(function (d) {
+      if (!d || typeof d !== "object") return;
+      var tr = el("tr");
+      tr.appendChild(el("td", "mono", d.mac || ""));
+      tr.appendChild(el("td", null, d.name || "Unknown"));
+      tr.appendChild(el("td", null, (d.type || "?").toUpperCase()));
+      tr.appendChild(el("td", null, d.vendor || "—"));
+      tr.appendChild(el("td", "mono", d.rssi ? String(d.rssi) : ""));
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Carga inicial: solo dispositivos (la tabla de runs ya está server-rendered)
+  if ($("#devices-body")) {
+    window.__onScanStatus = function () { pollScanResults(); };
+    pollScanResults({ runs: false });
   }
 
   function renderScanResults(results) {

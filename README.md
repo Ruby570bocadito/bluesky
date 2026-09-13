@@ -8,7 +8,7 @@ Escáneres BR/EDR y BLE · 14 módulos de ataque · 3 exploits · 13+ checks de 
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-4493f8?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![CI](https://img.shields.io/github/actions/workflow/status/Ruby570bocadito/bluesky/ci.yml?style=flat-square&label=tests&branch=main)](https://github.com/Ruby570bocadito/bluesky/actions)
-[![Tests](https://img.shields.io/badge/tests-292%20offline-3fb950?style=flat-square)](https://github.com/Ruby570bocadito/bluesky/actions)
+[![Tests](https://img.shields.io/badge/tests-349%20offline-3fb950?style=flat-square)](https://github.com/Ruby570bocadito/bluesky/actions)
 [![Platform](https://img.shields.io/badge/plataforma-Linux%20%7C%20Windows%20%7C%20Termux-6e7681?style=flat-square)](#compatibilidad)
 [![License](https://img.shields.io/github/license/Ruby570bocadito/bluesky?style=flat-square)](LICENSE)
 
@@ -29,6 +29,8 @@ Está pensado como herramienta de **formación y auditoría autorizada**: cada m
 ## Características
 
 - **3 escáneres** — descubrimiento BR/EDR + BLE, enumeración SDP y análisis de vulnerabilidades (13+ checks con CVE).
+- **Identificación de fabricante (OUI)** — cada dispositivo descubierto se anota con su fabricante a partir del prefijo MAC (base offline integrada: Apple, Samsung, Raspberry Pi, CSR, Xiaomi…).
+- **Exportación CSV/JSON** — `bluesky scan --export dispositivos.csv` y botón "Exportar CSV" en la web: el entregable de descubrimiento listo para hoja de cálculo.
 - **14 módulos de ataque + 3 exploits** — KNOB, BIAS, BLUFFS, BlueBorne, BlueFrag, BLESA, SweynTooth, WhisperPair, Crackle, BlueSmack, inyección de teclas, fuzzing L2CAP y shell RFCOMM.
 - **Consola REPL** estilo Metasploit con autocompletado, favoritos y sesiones persistentes.
 - **CLI moderno** — argparse con ayuda por comando, exit codes consistentes (0/1/2), salida `--json` para scripting y modo `--no-color`.
@@ -56,8 +58,8 @@ En Termux: `bash scripts/install_termux.sh` · En Windows: `scripts/install_wind
 # Estado del hardware Bluetooth
 bluesky status
 
-# Escanear dispositivos (BLE o clásico)
-bluesky scan --ble --timeout 12
+# Escanear dispositivos (BLE o clásico) y exportarlos a CSV
+bluesky scan --ble --timeout 12 --export dispositivos.csv
 
 # Analizar vulnerabilidades de un dispositivo
 bluesky vuln AA:BB:CC:DD:EE:FF
@@ -83,7 +85,7 @@ bluesky (ble_scan) > run
 
 | Comando | Descripción |
 |---------|-------------|
-| `scan [--ble\|--classic] [--timeout S]` | Escanear dispositivos cercanos |
+| `scan [--ble\|--classic] [--timeout S] [--export F]` | Escanear dispositivos cercanos (con fabricante OUI) |
 | `services <MAC>` | Enumerar servicios SDP |
 | `vuln <MAC> [--options JSON]` | Análisis de vulnerabilidades (13+ checks) |
 | `attack <módulo> [MAC] [--options JSON]` | Ejecutar un módulo del catálogo |
@@ -153,7 +155,8 @@ bluesky web --port 5000 --open
 
 - **Dashboard en vivo** — estado del adaptador, distribución de severidad y actividad con auto-refresh.
 - **Catálogo de módulos** — filtrado por nombre/tipo con detalle, opciones y CVEs.
-- **Escaneo en vivo** — inquiry/BLE o enumeración SDP/GATT desde el navegador.
+- **Escaneo en vivo con opciones** — inquiry/BLE o enumeración SDP/GATT desde el navegador, con elección de modo (Classic/BLE) y timeout.
+- **Dispositivos descubiertos** — tabla en vivo con MAC, nombre, tipo, fabricante (OUI) y RSSI, exportable a CSV con un clic.
 - **Sesiones, reportes y logs** — visores integrados con renderizado seguro.
 
 ## Compatibilidad
@@ -168,7 +171,7 @@ bluesky web --port 5000 --open
 ## Tests y calidad
 
 ```bash
-python -m pytest tests/ -q     # 292 tests, 100% offline
+python -m pytest tests/ -q     # 349 tests, 100% offline
 ```
 
 CI en GitHub Actions: suite completa en cada push + lint con ruff. Cobertura de regresión en `tests/test_qa_*.py` (path traversal, XSS, concurrencia, contractos de módulos).

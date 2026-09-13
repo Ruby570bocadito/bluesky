@@ -724,6 +724,7 @@ class BlueskyConsole(cmd.Cmd):
                 table.add_column("Name", style="cyan")
                 table.add_column("MAC", style="green")
                 table.add_column("Type", style="yellow")
+                table.add_column("Vendor", style="magenta")
                 table.add_column("RSSI", style="dim")
                 for i, d in enumerate(devices, 1):
                     info = d.get("info", {})
@@ -732,13 +733,15 @@ class BlueskyConsole(cmd.Cmd):
                         d.get("name", "?"),
                         d.get("mac", "N/A"),
                         d.get("type", "?"),
+                        d.get("vendor", "-") or "-",
                         str(info.get("rssi", ""))
                     )
                 self.console.print(table)
             else:
                 print(f"\n  {colorize(f'{len(devices)} dispositivo(s) encontrado(s)', 'green')}")
                 for i, d in enumerate(devices, 1):
-                    print(f"  {i:2d}. {d.get('name','?')} ({d.get('mac','N/A')})")
+                    vendor = f" · {d.get('vendor')}" if d.get("vendor") else ""
+                    print(f"  {i:2d}. {d.get('name','?')} ({d.get('mac','N/A')}){vendor}")
 
             # Guardar en sesión
             for d in devices:

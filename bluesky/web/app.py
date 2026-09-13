@@ -33,7 +33,7 @@ from typing import Dict, List
 from datetime import datetime
 
 try:
-    from flask import Flask, render_template, request, jsonify
+    from flask import Flask, render_template, request, jsonify, Response
 except ImportError:
     Flask = None
 
@@ -517,15 +517,49 @@ def _register_routes(app):
 
     @app.route("/api/scan", methods=["POST"])
     def api_scan():
-        """Ejecuta escaneo de dispositivos."""
+        """Ejecuta escaneo de dispositivos.
+
+        Body JSON:
+            scanner: "device" (descubrimiento) o "services" (SDP/GATT)
+            target:  MAC (obligatoria para "services")
+            type:    "all" | "ble" | "classic" (solo scanner=device)
+            timeout: segundos, 1-60 (solo scanner=device)
+        """
         if not app.state["engine"]:
             return jsonify({"error": "Engine no disponible"}), 500
 
         data = request.get_json(silent=True) or {}
         if not isinstance(data, dict):
             data = {}
-        scanner = str(data.get("scanner", "device") or "device")
-        target = str(data.get("target", "") or "")
+        scanner = str(data.get("scanner", "device") or "device").strip().lower()
+        target = str(data.get("target", "") or "").strip()
+
+        if scanner not in ("device", "services", "scan"):
+            return jsonify({"error": "Escáner inválido: 'device' o 'services'"}), 400
+
+        if scanner == "services" and not target:
+            return jsonify({
+                "status": "error",
+                "message": "El escáner de servicios requiere una MAC objetivo",
+            }), 400
+
+        # Opciones del escáner de dispositivos (validadas y acotadas)
+        options: Dict = {}
+        if scanner in ("device", "scan"):
+            scan_type = str(data.get("type", "all") or "all").strip().lower()
+            if scan_type not in ("all", "ble", "classic"):
+                return jsonify({"error": "type inválido: all | ble | classic"}), 400
+            options["type"] = scan_type
+
+            raw_timeout = data.get("timeout")
+            if raw_timeout not in (None, ""):
+                try:
+                    timeout_val = int(raw_timeout)
+                except (TypeError, ValueError):
+                    return jsonify({"error": "timeout debe ser un número (1-60)"}), 400
+                if not 1 <= timeout_val <= 60:
+                    return jsonify({"error": "timeout fuera de rango (1-60)"}), 400
+                options["timeout"] = str(timeout_val)
 
         with app.state["lock"]:
             if app.state["scan_in_progress"]:
@@ -533,13 +567,17 @@ def _register_routes(app):
                                 "message": "Ya hay una operación en curso"}), 409
             app.state["scan_in_progress"] = True
 
-        add_log("info", f"Iniciando escaneo: {scanner}")
+        scan_mode = options.get("type")
+        mode_str = f" · modo {scan_mode}" if scan_mode and scan_mode != "all" else ""
+        add_log("info", f"Iniciando escaneo: {scanner}{mode_str} "
+                f"target={target or 'broadcast'}")
 
         def scan_thread():
             try:
                 result = app.state["engine"].run_module(
-                    "scan" if scanner == "device" else "services",
+                    "scan" if scanner in ("device", "scan") else "services",
                     target=target,
+                    options=options,
                 )
                 with app.state["lock"]:
                     app.state["scan_results"].append({
@@ -550,8 +588,12 @@ def _register_routes(app):
                         "result": result,
                     })
                     app.state["last_scan_time"] = datetime.now()
-                add_log("info", f"Escaneo {scanner}: "
-                        f"{'completado' if result.get('success') else 'falló'}")
+                devices = (result.get("data") or {}).get("devices") or []
+                if isinstance(devices, list) and devices:
+                    add_log("info", f"Escaneo {scanner}: {len(devices)} dispositivo(s)")
+                else:
+                    add_log("info", f"Escaneo {scanner}: "
+                            f"{'completado' if result.get('success') else 'falló'}")
             except Exception as e:
                 add_log("error", f"Escaneo: {e}")
             finally:
@@ -561,6 +603,32 @@ def _register_routes(app):
         threading.Thread(target=scan_thread, daemon=True).start()
 
         return jsonify({"status": "started", "message": "Escaneo iniciado"})
+
+    @app.route("/api/scan/export")
+    def api_scan_export():
+        """Exporta en CSV los dispositivos del último escaneo de dispositivos."""
+        from bluesky.utils.csv_export import devices_to_csv, devices_from_scan_result
+
+        with app.state["lock"]:
+            results = list(app.state["scan_results"])
+
+        # Último resultado (en orden inverso) que contenga dispositivos
+        devices: List = []
+        for entry in reversed(results):
+            devices = devices_from_scan_result(entry.get("result") or {})
+            if devices:
+                break
+
+        if not devices:
+            return jsonify({"error": "No hay dispositivos que exportar "
+                                     "(ejecuta antes un escaneo de dispositivos)"}), 404
+
+        csv_text = devices_to_csv(devices)
+        return Response(
+            csv_text,
+            mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=bluesky_devices.csv"},
+        )
 
     @app.route("/api/scan/status")
     def api_scan_status():

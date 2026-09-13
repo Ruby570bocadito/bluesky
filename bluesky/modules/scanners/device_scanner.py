@@ -10,6 +10,7 @@ from typing import List
 
 from bluesky.core.engine import BaseModule
 from bluesky.utils.platform import is_windows, check_bleak
+from bluesky.utils.oui import annotate_devices
 
 
 class DeviceScanner(BaseModule):
@@ -53,10 +54,11 @@ class DeviceScanner(BaseModule):
 
         scan_duration = time.time() - scan_start
 
-        # Obtener info detallada
+        # Obtener info detallada + fabricante (lookup OUI offline)
         for dev in devices:
             if "info" not in dev or not dev["info"]:
                 dev["info"] = self._get_device_info(dev["mac"])
+        annotate_devices(devices)
 
         self.result["data"]["devices"] = devices
         self.result["data"]["total"] = len(devices)

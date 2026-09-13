@@ -79,8 +79,10 @@ def format_device_list(devices: list) -> str:
         rssi = dev.get("rssi", "")
         dtype = dev.get("type", "?")
         dtype_icon = target_type_icon(dtype)
+        vendor = dev.get("vendor", "")
+        vendor_str = f" {colorize('· ' + vendor, 'dim')}" if vendor else ""
         rssi_str = f" [{rssi} dBm]" if rssi else ""
-        lines.append(f"  {i:2d}. {dtype_icon} {colorize(name, 'cyan')} {colorize(mac, 'dim')}{rssi_str}")
+        lines.append(f"  {i:2d}. {dtype_icon} {colorize(name, 'cyan')} {colorize(mac, 'dim')}{vendor_str}{rssi_str}")
 
     return "\n".join(lines)
 
