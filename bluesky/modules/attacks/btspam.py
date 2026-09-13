@@ -12,7 +12,6 @@ Soporta Linux (BlueZ), Windows (AF_BTH/RFCOMM), y Termux.
 """
 
 import os
-import sys
 import time
 import random
 import threading
@@ -20,6 +19,7 @@ import subprocess
 from typing import Dict, List, Optional, Tuple
 
 from bluesky.core.engine import BaseModule
+from bluesky.utils.platform import is_windows
 
 
 # ─── Constantes ──────────────────────────────────────────────────────────────
@@ -36,36 +36,18 @@ RFCOMM_CHANNELS = list(range(1, 31))  # Canales RFCOMM estándar
 OBEX_UUID = "00001105-0000-1000-8000-00805f9b34fb"
 
 # ─── Utilidades de plataforma ───────────────────────────────────────────────
-
-
-def _is_windows() -> bool:
-    return sys.platform.startswith("win")
-
-
-def _is_linux() -> bool:
-    return sys.platform.startswith("linux")
-
-
-def _is_termux() -> bool:
-    return "com.termux" in os.environ.get("HOME", "")
-
-
-def _is_wsl() -> bool:
-    if not _is_linux():
-        return False
-    try:
-        with open("/proc/version", "r") as f:
-            return "microsoft" in f.read().lower() or "wsl" in f.read().lower()
-    except (FileNotFoundError, IOError):
-        return False
+# Detección de SO delegada en bluesky.utils.platform (fuente única del
+# proyecto): antes este módulo mantenía 4 copias propias (_is_windows,
+# _is_linux, _is_termux y una _is_wsl con doble lectura de /proc/version
+# que nunca funcionó y no se llamaba desde ningún sitio).
 
 
 def _get_adapter_mac() -> str:
     """Obtiene la MAC del adaptador Bluetooth local."""
-    if _is_windows():
+    if is_windows():
         # En Windows no exponemos la MAC aquí; basta saber que hay adaptador.
         return "local"
-    elif _is_linux():
+    else:
         try:
             result = subprocess.run(
                 ["hciconfig"],
@@ -330,10 +312,8 @@ class BTSpam(BaseModule):
     def _pairing_flood(self, target: str, rate: int, count: int,
                        duration: int, delay: float):
         """Inunda con solicitudes de emparejamiento."""
-        if _is_windows():
+        if is_windows():
             self._pairing_flood_windows(target, rate, count, duration, delay)
-        elif _is_linux():
-            self._pairing_flood_linux(target, rate, count, duration, delay)
         else:
             self._pairing_flood_linux(target, rate, count, duration, delay)
 
@@ -415,10 +395,8 @@ class BTSpam(BaseModule):
     def _obex_spam(self, target: str, rate: int, message: str,
                    count: int, duration: int, delay: float):
         """Envía mensajes OBEX Push repetidamente."""
-        if _is_windows():
+        if is_windows():
             self._obex_spam_windows(target, rate, message, count, duration, delay)
-        elif _is_linux():
-            self._obex_spam_linux(target, rate, message, count, duration, delay)
         else:
             self._obex_spam_linux(target, rate, message, count, duration, delay)
 
@@ -558,10 +536,8 @@ class BTSpam(BaseModule):
     def _connection_flood(self, target: str, rate: int, count: int,
                           duration: int, delay: float):
         """Abre y cierra conexiones RFCOMM masivamente."""
-        if _is_windows():
+        if is_windows():
             self._conn_flood_windows(target, rate, count, duration, delay)
-        elif _is_linux():
-            self._conn_flood_linux(target, rate, count, duration, delay)
         else:
             self._conn_flood_linux(target, rate, count, duration, delay)
 
@@ -752,7 +728,7 @@ class BTSpam(BaseModule):
         """Escanea dispositivos Bluetooth disponibles."""
         devices = []
         try:
-            if _is_windows():
+            if is_windows():
                 # Usar bleak para escanear en Windows
                 import asyncio
                 from bleak import BleakScanner
@@ -770,7 +746,7 @@ class BTSpam(BaseModule):
                     mac = d.address
                     if mac:
                         devices.append({"mac": mac, "name": name, "type": "ble"})
-            elif _is_linux():
+            else:
                 result = subprocess.run(
                     ["bluetoothctl", "--timeout", "5", "scan", "on"],
                     capture_output=True, text=True, timeout=8
@@ -821,7 +797,7 @@ class BTSpam(BaseModule):
         if not ok:
             return False, msg
         import shutil
-        if _is_windows():
+        if is_windows():
             try:
                 import socket
                 s = socket.socket(socket.AF_BTH, socket.SOCK_STREAM)
@@ -829,7 +805,7 @@ class BTSpam(BaseModule):
                 return True, ""
             except Exception:
                 return True, "Windows Bluetooth disponible (limitado a emparejados)"
-        elif _is_linux():
+        else:
             missing = [cmd for cmd in ["bluetoothctl"] if not shutil.which(cmd)]
             if missing:
                 return True, f"Herramientas faltantes: {', '.join(missing)}. Algunas funciones pueden no estar disponibles."

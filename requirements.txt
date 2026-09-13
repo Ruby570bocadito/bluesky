@@ -3,28 +3,26 @@
 # =============================================================================
 # Instalación: pip install -r requirements.txt
 #
-# Instalación completa (BLE + Web):
-#   pip install -r requirements.txt flask bleak pybluez scapy cryptography
-#
-# O usando extras (desde pyproject.toml):
-#   pip install bluesky[all]
+# O usando extras (definidos en setup.py):
+#   pip install bluesky[full]    # BLE + Web + todo
 #   pip install bluesky[web]     # Solo web dashboard
 #   pip install bluesky[ble]     # Solo Bluetooth LE
 #   pip install bluesky[dev]     # Desarrollo
+#
+# Todas las dependencias listadas se usan directamente por el código:
+#   rich        → CLI, consola REPL y modo educativo (bluesky/cli.py, console.py)
+#   pyserial    → shell RFCOMM e inyección AT (modules/exploits, bluebugging)
+#   flask       → dashboard web (bluesky/web/app.py)
+#   bleak       → escaneo BLE cross-platform (device_scanner, blueborne, btspam)
+#   scapy       → packet crafting (KNOB, BLUFFS, SweynTooth, Crackle, ...)
+#   cryptography→ cifrados BLE (crackle)
+#   pytest*     → suite de tests offline (tests/)
 
-# ─── Core ──────────────────────────────────────────────────────────────────
-click>=8.0.0
-colorama>=0.4
-
-# ─── CLI interactiva ──────────────────────────────────────────────────────
+# ─── CLI / consola ───────────────────────────────────────────────────────
 rich>=10.0.0
 
 # ─── Comunicación serie ────────────────────────────────────────────────────
 pyserial>=3.5
-
-# ─── Testing ──────────────────────────────────────────────────────────────
-pytest>=7.0
-pytest-cov>=4.0
 
 # ─── Web Dashboard ──────────────────────────────────────────────────────────
 flask>=3.0.0
@@ -34,14 +32,13 @@ bleak>=0.14.0          # BLE cross-platform
 scapy>=2.4.5           # Packet crafting (KNOB, BLUFFS, BTLEJack, SweynTooth)
 cryptography>=3.4.0    # Criptografía BLE (Crackle, cifrados)
 
-# ─── Herramientas adicionales ───────────────────────────────────────────────
-requests>=2.25.0
+# ─── Testing ──────────────────────────────────────────────────────────────
+pytest>=7.0
+pytest-cov>=4.0
 
 # ─── Opcionales (instalar si es necesario) ─────────────────────────────────
 # pybluez>=0.22        # Bluetooth Classic (solo Linux legacy, no recomendado)
 # pycryptodome>=3.0    # Alternativa cryptography (AES, ECC)
-# bs4>=4.10.0          # BeautifulSoup - parsing HTML (OSINT)
-# lxml>=4.9.0          # XML parsing
 
 # ─── Notas de compatibilidad ──────────────────────────────────────────────
 # Windows: Usar bleak para BLE. PyBluez no funciona en Windows moderno.

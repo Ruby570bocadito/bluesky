@@ -21,7 +21,7 @@ FROM python:3.12-slim AS base
 
 LABEL maintainer="Ruby570bocadito"
 LABEL description="Bluetooth Security Auditing Framework"
-LABEL version="0.1.0"
+LABEL version="0.4.0"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -30,10 +30,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /bluesky
 
-# Dependencias base Python
+# Dependencias Python (rich, flask, bleak, scapy, cryptography, pyserial, pytest)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir bleak rich click colorama
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código
 COPY bluesky/ bluesky/

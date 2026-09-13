@@ -30,13 +30,6 @@ class Bias(BaseModule):
     target_type = "classic"
     severity = "critical"
 
-    SEVERITY_MAP = {
-        "critical": "🔴",
-        "high": "🟠",
-        "medium": "🟡",
-        "low": "⚪",
-    }
-
     def run(self):
         """Ejecuta el módulo BIAS."""
         target = self.target

@@ -1,13 +1,17 @@
 """
 Reporter - Generación de reportes de auditoría Bluetooth.
 Soporta formatos JSON, HTML y TXT.
+
+Todos los datos dinámicos interpolados en el HTML se escapan con
+utils.format.esc(): un dispositivo con un nombre hostil no debe poder
+inyectar markup al abrir el reporte en el navegador.
 """
 
 import json
 from pathlib import Path
-from html import escape as html_escape
 
 from bluesky import __version__ as _bluesky_version
+from bluesky.utils.format import esc
 
 
 class Reporter:
@@ -113,9 +117,8 @@ class Reporter:
         if not isinstance(results, list):
             results = []
 
-        def esc(value) -> str:
-            """Escape HTML de cualquier dato tolerando None/no-str."""
-            return html_escape(str(value), quote=True)
+        # esc() viene de utils/format.py (compartida con Autopilot y futuros
+        # generadores de reporte): un único punto de escape HTML.
 
         def esc_class(value) -> str:
             """Escape para valores usados dentro de un atributo class.

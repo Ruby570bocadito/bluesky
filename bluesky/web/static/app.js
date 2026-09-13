@@ -45,8 +45,11 @@
         var pill = $("#scan-pill");
         if (pill) {
           var pd = pill.querySelector(".dot");
-          var pt = pill.lastChild;
           if (pd) pd.className = "dot " + (d.in_progress ? "busy" : "live");
+          var label = pill.lastChild;
+          if (label && label.nodeType === 3) {
+            label.textContent = d.in_progress ? "Escaneo en curso" : "Listo";
+          }
         }
         if (window.__onScanStatus) window.__onScanStatus(d);
       })
@@ -128,8 +131,6 @@
         .catch(function () { toast("No hay dispositivos para exportar"); });
     });
   }
-
-  function pollScanStatus() {}
 
   function pollScanResults(opts) {
     fetch("/api/scan/status")

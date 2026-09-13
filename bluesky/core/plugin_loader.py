@@ -64,10 +64,6 @@ class PluginNotFound(PluginError):
     """Plugin no encontrado."""
 
 
-class PluginDependencyError(PluginError):
-    """Dependencia de plugin no satisfecha."""
-
-
 # ─── Plugin Loader ───────────────────────────────────────────────────────────
 
 class PluginLoader:

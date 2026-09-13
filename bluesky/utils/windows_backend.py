@@ -10,12 +10,11 @@ así que usamos:
   - Windows Registry para información del hardware
 """
 
-import re
 import json
 import subprocess
 from typing import Dict, List, Optional
 
-from .platform import is_windows, check_command
+from .platform import check_command
 
 
 # ─── PowerShell Scripts Embebidos ──────────────────────────────────────────
@@ -123,33 +122,6 @@ $result = [PSCustomObject]@{
     AdapterName    = if ($adapter) { $adapter.FriendlyName } else { '' }
 }
 return $result | ConvertTo-Json -Compress
-"""
-
-_PS_SCAN_DEVICES = """
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | 
-    Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and 
-    $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
-Function Await($WinRtTask, $ResultType) {
-    $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
-    $netTask = $asTask.Invoke($null, @($WinRtTask))
-    $netTask.Wait(-1) | Out-Null
-    $netTask.Result
-}
-[Windows.Devices.Radios.Radio,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
-[Windows.Devices.Bluetooth.BluetoothAdapter,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
-$radios = Await ([Windows.Devices.Radios.Radio]::RequestAccessAsync()) ([Windows.Devices.Radios.RadioAccessStatus])
-if ($radios -eq 'Allowed') {
-    $btAdapter = Await ([Windows.Devices.Bluetooth.BluetoothAdapter]::GetDefaultAsync()) ([Windows.Devices.Bluetooth.BluetoothAdapter])
-    if ($btAdapter) {
-        $result = [PSCustomObject]@{
-            Available = $true
-            Address   = '{0:X}' -f $btAdapter.BluetoothAddress
-        }
-        return $result | ConvertTo-Json -Compress
-    }
-}
-return '{"Available":false}' | ConvertTo-Json -Compress
 """
 
 
@@ -309,33 +281,6 @@ def get_adapter_mac() -> Optional[str]:
             if pmac and pmac != "Unknown":
                 return pmac
     return None
-
-
-def get_local_mac() -> Optional[str]:
-    """Obtiene la MAC del adaptador local (cross-platform wrapper)."""
-    if is_windows():
-        return get_adapter_mac()
-    # En Linux, usar hciconfig
-    try:
-        result = subprocess.run(
-            ["hciconfig"],
-            capture_output=True, text=True, timeout=3
-        )
-        m = re.search(r'BD Address:\s*(\S+)', result.stdout)
-        if m:
-            return m.group(1)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return None
-
-
-def check_bluetooth_on_windows() -> bool:
-    """
-    Verifica rápidamente si Bluetooth está encendido en Windows.
-    Sin depender de bleak ni pybluez.
-    """
-    status = get_bluetooth_status()
-    return status.get("available", False)
 
 
 def enable_bluetooth_windows() -> bool:

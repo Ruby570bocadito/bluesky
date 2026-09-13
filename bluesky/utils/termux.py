@@ -1,21 +1,17 @@
 """
 Termux-specific utilities for running bluesky on Android.
 Auto-detects Termux environment and adapts commands accordingly.
+
+La detección de plataforma vive en bluesky.utils.platform; este módulo
+reexporta is_termux() por compatibilidad y añade utilidades específicas
+de Termux (root, Termux:API).
 """
 
-import os
 import json
 import shutil
 import subprocess
 
-
-def is_termux() -> bool:
-    """Detecta si estamos corriendo en Termux."""
-    return (
-        "com.termux" in os.environ.get("HOME", "").lower() or
-        os.path.exists("/data/data/com.termux") or
-        os.environ.get("TERMUX_VERSION") is not None
-    )
+from .platform import is_termux
 
 
 def is_rooted() -> bool:

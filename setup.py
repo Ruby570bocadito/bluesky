@@ -34,7 +34,6 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        "click>=8.0.0",
         "rich>=10.0.0",
         "pyserial>=3.5",
     ],
@@ -43,7 +42,6 @@ setup(
             "bleak>=0.14.0",
             "scapy>=2.4.5",
             "cryptography>=3.4.0",
-            "requests>=2.25.0",
             "flask>=3.0.0",
         ],
         "web": [

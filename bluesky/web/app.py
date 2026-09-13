@@ -80,6 +80,15 @@ def create_app(engine=None, debug: bool = False) -> "Flask":
     # ─── Importar módulos de bluesky ────────────────────────────────────────
     _import_bluesky(app)
 
+    # ─── Contexto global de plantillas ──────────────────────────────────────
+    # `version` disponible en TODAS las páginas: el footer de base.html
+    # mostraba un fallback hardcodeado ('0.4.0') en todo menos en /about.
+    try:
+        from bluesky import __version__ as _pkg_version
+    except Exception:
+        _pkg_version = ""
+    app.context_processor(lambda: {"version": _pkg_version})
+
     # ─── Registrar rutas ────────────────────────────────────────────────────
     _register_routes(app)
 

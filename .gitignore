@@ -41,6 +41,13 @@ reports/
 # Log files
 *.log
 
+# Backup / temporary files
+*.bak
+*.old
+*.orig
+*.tmp
+*.rej
+
 # OS generated files
 .DS_Store
 .DS_Store?

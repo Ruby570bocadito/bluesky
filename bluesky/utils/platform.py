@@ -128,26 +128,3 @@ def get_available_backends() -> Dict[str, bool]:
         "powershell": is_windows() and check_command("powershell"),
         "termux_api": check_command("termux-bluetooth"),
     }
-
-
-def best_backend_for_scan() -> str:
-    """
-    Determina el mejor backend disponible para escaneo Bluetooth.
-    
-    Returns:
-        'bleak', 'bluez', 'windows_powershell', 'termux_api', o 'none'
-    """
-    backends = get_available_backends()
-    
-    if backends["bleak"]:
-        return "bleak"       # Cross-platform BLE, funciona en todos lados
-    if backends["bluez"]:
-        return "bluez"       # Linux BlueZ (Classic + BLE)
-    if backends["windows_api"]:
-        return "windows_powershell"  # Windows via PowerShell
-    if backends["termux_api"]:
-        return "termux_api"  # Termux:API
-    if backends["pybluez"]:
-        return "pybluez"     # PyBluez fallback
-    
-    return "none"

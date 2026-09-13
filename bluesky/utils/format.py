@@ -1,8 +1,15 @@
 """
 Utility functions for formatting output (TUI helpers).
+
+Punto único para:
+  * Iconos de severidad/tipo de target (usados por CLI, consola, módulos)
+  * Escape HTML de datos dinámicos (reportes) — usar SIEMPRE este helper,
+    nunca html.escape directo disperso por el código
+  * Colores ANSI
 """
 
 import shutil
+from html import escape as _html_escape
 
 
 def terminal_width() -> int:
@@ -11,10 +18,14 @@ def terminal_width() -> int:
 
 
 def separator(char: str = "─", title: str = "") -> str:
-    """Crea un separador visual para la terminal."""
+    """Crea un separador visual para la terminal.
+
+    El título se normaliza con un espacio a cada lado, independientemente
+    de que quien llame lo pase ya espaciado (" Escaneo ") o no ("Escaneo").
+    """
     width = terminal_width()
     if title:
-        title = f" {title} "
+        title = f" {title.strip()} "
         half = (width - len(title)) // 2
         return f"{char * half}{title}{char * (width - len(title) - half)}"
     return char * width
@@ -29,10 +40,11 @@ def colorize(text: str, color: str) -> str:
         "blue": "\033[94m",
         "magenta": "\033[95m",
         "cyan": "\033[96m",
+        "white": "\033[97m",
         "bold": "\033[1m",
         "dim": "\033[2m",
+        "faint": "\033[2m",   # sinónimo de dim (la CLI lo usa)
         "reset": "\033[0m",
-        "white": "\033[97m",
     }
     c = colors.get(color)
     if c is None:
@@ -41,16 +53,33 @@ def colorize(text: str, color: str) -> str:
     return f"{c}{text}{reset}"
 
 
+# Mapa canónico de severidad → icono. ÚNICA fuente de verdad del proyecto:
+# usar severity_icon() en lugar de definir mapas locales (antes existían
+# copias divergentes en vuln_scanner y bias con colores intercambiados).
+SEVERITY_ICONS = {
+    "critical": "🔴",
+    "high": "🟠",
+    "medium": "🟡",
+    "low": "⚪",
+    "info": "ℹ️",
+}
+
+
 def severity_icon(severity) -> str:
     """Retorna icono para nivel de severidad (tolera None/no-string)."""
-    icons = {
-        "critical": "🔴",
-        "high": "🟠",
-        "medium": "🟡",
-        "low": "⚪",
-        "info": "ℹ️",
-    }
-    return icons.get(str(severity or "").lower(), "⚪")
+    return SEVERITY_ICONS.get(str(severity or "").lower(), "⚪")
+
+
+def esc(value) -> str:
+    """Escape HTML de cualquier dato dinámico (None, str, int, dict...).
+
+    Obligatorio para TODO dato que provenga de fuentes externas (nombres
+    de dispositivos Bluetooth, MACs, IDs de vulnerabilidad, errores...)
+    antes de interpolarse en HTML de reportes: un dispositivo con un
+    nombre como '<img src=x onerror=alert(1)>' no debe ejecutar JS al
+    abrir el reporte en un navegador.
+    """
+    return _html_escape(str(value) if value is not None else "", quote=True)
 
 
 def target_type_icon(ttype) -> str:

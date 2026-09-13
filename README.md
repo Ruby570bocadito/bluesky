@@ -8,7 +8,7 @@ Escáneres BR/EDR y BLE · 14 módulos de ataque · 3 exploits · 13+ checks de 
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-4493f8?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![CI](https://img.shields.io/github/actions/workflow/status/Ruby570bocadito/bluesky/ci.yml?style=flat-square&label=tests&branch=main)](https://github.com/Ruby570bocadito/bluesky/actions)
-[![Tests](https://img.shields.io/badge/tests-349%20offline-3fb950?style=flat-square)](https://github.com/Ruby570bocadito/bluesky/actions)
+[![Tests](https://img.shields.io/badge/tests-388%20offline-3fb950?style=flat-square)](https://github.com/Ruby570bocadito/bluesky/actions)
 [![Platform](https://img.shields.io/badge/plataforma-Linux%20%7C%20Windows%20%7C%20Termux-6e7681?style=flat-square)](#compatibilidad)
 [![License](https://img.shields.io/github/license/Ruby570bocadito/bluesky?style=flat-square)](LICENSE)
 
@@ -153,6 +153,8 @@ bluesky web --port 5000 --open
 
 ![Detalle de módulo con modo educativo](docs/screenshot_module.png)
 
+![Escaneo en vivo desde el navegador](docs/screenshot_scan.png)
+
 - **Dashboard en vivo** — estado del adaptador, distribución de severidad y actividad con auto-refresh.
 - **Catálogo de módulos** — filtrado por nombre/tipo con detalle, opciones y CVEs.
 - **Escaneo en vivo con opciones** — inquiry/BLE o enumeración SDP/GATT desde el navegador, con elección de modo (Classic/BLE) y timeout.
@@ -171,7 +173,7 @@ bluesky web --port 5000 --open
 ## Tests y calidad
 
 ```bash
-python -m pytest tests/ -q     # 349 tests, 100% offline
+python -m pytest tests/ -q     # 388 tests, 100% offline
 ```
 
 CI en GitHub Actions: suite completa en cada push + lint con ruff. Cobertura de regresión en `tests/test_qa_*.py` (path traversal, XSS, concurrencia, contractos de módulos).
@@ -187,7 +189,7 @@ bluesky/
 │   └── web/           # dashboard Flask (app + plantillas + estáticos)
 ├── plugins/           # plugins de ejemplo
 ├── scripts/           # instalación (Linux/Windows/Termux), demo, build
-├── tests/             # 292 tests offline
+├── tests/             # 388 tests offline
 └── docs/              # capturas y documentación adicional
 ```
 

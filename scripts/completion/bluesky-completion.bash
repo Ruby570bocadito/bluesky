@@ -10,20 +10,27 @@ _bluesky_complete() {
     local cur prev words cword
     _init_completion || return
 
-    # Comandos principales
-    local COMMANDS="scan list info attack services status console report session help"
+    # Comandos principales (los mismos que enruta bluesky/cli.py)
+    local COMMANDS="scan list info vuln auto attack services status report session console spam config plugin web educate help"
 
-    # Opciones globales
-    local GLOBAL_OPTS="-h --help --version -v -vv --verbose --debug --log-file"
+    # Opciones globales (las reales: -V/--version, --config, --no-color, --json)
+    local GLOBAL_OPTS="-h --help -V --version --config --no-color --json"
 
     # Opciones por comando
-    local SCAN_OPTS="--ble --classic --timeout"
-    local REPORT_OPTS="--html --json --txt --output"
+    local SCAN_OPTS="--ble --classic --timeout --json"
+    local SERVICES_OPTS="--json"
+    local ATTACK_OPTS="--target --options --json"
+    local VULN_OPTS="--options --json"
+    local AUTO_OPTS="--mode --chain --timeout --json"
+    local SPAM_OPTS="--method --rate --count --duration --delay --message --json"
+    local REPORT_OPTS="--html --json --txt -o --output"
+    local LIST_OPTS="--json"
+    local STATUS_OPTS="--json"
+    local WEB_OPTS="-p --port -H --host --debug -o --open"
     local SESSION_OPTS="save load list summary"
-    local ATTACK_OPTS="--options"
 
     if [[ $cword -eq 1 ]]; then
-        # Primer argumento: comandos principales + flags
+        # Primer argumento: comandos principales + flags globales
         COMPREPLY=($(compgen -W "$COMMANDS $GLOBAL_OPTS" -- "$cur"))
         return
     fi
@@ -31,6 +38,13 @@ _bluesky_complete() {
     case "${words[1]}" in
         scan)
             COMPREPLY=($(compgen -W "$SCAN_OPTS" -- "$cur"))
+            ;;
+        services|vuln)
+            if [[ $cword -eq 2 ]]; then
+                COMPREPLY=()  # el target es una MAC
+            else
+                COMPREPLY=($(compgen -W "$SERVICES_OPTS $VULN_OPTS" -- "$cur"))
+            fi
             ;;
         info|attack)
             if [[ $cword -eq 2 ]]; then
@@ -48,18 +62,17 @@ for m in e.list_modules():
                 COMPREPLY=($(compgen -W "$ATTACK_OPTS" -- "$cur"))
             fi
             ;;
-        services)
-            # Completar targets de la sesión actual si existen
-            local targets=$(python3 -c "
-import sys, json
-sys.path.insert(0, 'bluesky')
-from bluesky.core.session import Session
-s = Session('')
-if s.load():
-    for t in s.targets:
-        print(t.get('mac', ''))
-" 2>/dev/null)
-            COMPREPLY=($(compgen -W "$targets" -- "$cur"))
+        auto)
+            if [[ $cword -eq 2 ]]; then
+                COMPREPLY=($(compgen -W "--mode --chain --timeout --json" -- "$cur"))
+            else
+                case "${words[2]}" in
+                    --mode) COMPREPLY=($(compgen -W "detect attack full" -- "$cur")) ;;
+                esac
+            fi
+            ;;
+        spam)
+            COMPREPLY=($(compgen -W "$SPAM_OPTS all" -- "$cur"))
             ;;
         report)
             COMPREPLY=($(compgen -W "$REPORT_OPTS" -- "$cur"))
@@ -77,8 +90,24 @@ for s in Session.list_sessions():
                 COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
             fi
             ;;
-        console)
-            # Sin autocompletado adicional para la consola interactiva
+        web)
+            COMPREPLY=($(compgen -W "$WEB_OPTS" -- "$cur"))
+            ;;
+        educate)
+            local topics=$(python3 -c "
+import sys
+sys.path.insert(0, 'bluesky')
+from bluesky.core.education import covered_modules
+for m in covered_modules():
+    print(m)
+" 2>/dev/null)
+            COMPREPLY=($(compgen -W "$topics" -- "$cur"))
+            ;;
+        list|status)
+            COMPREPLY=($(compgen -W "$LIST_OPTS $STATUS_OPTS" -- "$cur"))
+            ;;
+        console|config|plugin|help)
+            # Sin autocompletado adicional
             ;;
         *)
             # Intentar completar archivos

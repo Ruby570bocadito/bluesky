@@ -13,11 +13,11 @@ Requiere: ModuleEngine para cargar módulos dinámicamente.
 import sys
 import subprocess
 from datetime import datetime
-from html import escape as html_escape
 from pathlib import Path
 from typing import List, Dict
 
 from bluesky.core.engine import BaseModule
+from bluesky.utils.format import esc as _html_esc, severity_icon
 
 
 class Autopilot(BaseModule):
@@ -305,12 +305,14 @@ class Autopilot(BaseModule):
     def _esc(value) -> str:
         """HTML-escape de cualquier valor (None, str, int, etc.).
 
-        Es obligatorio escapar TODO dato dinámico que venga de dispositivos
-        Bluetooth: el `name` anunciado por un dispositivo puede contener
-        HTML/JS hostil (p.ej. '<script>...</script>') y, si se interpola
-        directo, se ejecutaría al abrir el reporte autopilot en el navegador.
+        Delega en utils.format.esc (helper compartido por todos los
+        generadores de reporte). Es obligatorio escapar TODO dato dinámico
+        que venga de dispositivos Bluetooth: el `name` anunciado por un
+        dispositivo puede contener HTML/JS hostil (p.ej. '<script>...') y,
+        si se interpola directo, se ejecutaría al abrir el reporte autopilot
+        en el navegador.
         """
-        return html_escape(str(value) if value is not None else "", quote=True)
+        return _html_esc(value)
 
     def _phase_report(self, targets: List[dict], results: Dict[str, List[dict]],
                       all_vulns: dict) -> str:
@@ -438,7 +440,7 @@ class Autopilot(BaseModule):
             lines.append(f"\n  🎯 {t['name']} ({t['mac']})")
             if found:
                 for v in found:
-                    icon = "🔴" if v["severity"] == "critical" else "🟡"
+                    icon = severity_icon(v.get("severity", "low"))
                     lines.append(f"    {icon} {v['id']}: {v['name']}")
                     if v.get('cve', 'N/A') != 'N/A':
                         lines.append(f"       CVE: {v.get('cve', 'N/A')}")
@@ -485,7 +487,7 @@ class Autopilot(BaseModule):
             if found_vulns:
                 lines.append("    Vulnerabilidades:")
                 for v in found_vulns:
-                    icon = "🔴" if v["severity"] == "critical" else "🟡"
+                    icon = severity_icon(v.get("severity", "low"))
                     lines.append(f"      {icon} {v['id']} ({v['severity']})")
 
         return "\n".join(lines)

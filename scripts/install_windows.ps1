@@ -123,8 +123,6 @@ Write-Step "Instalando dependencias Python..."
 $deps = @(
     "bleak",           # BLE cross-platform (Windows nativo)
     "rich",            # CLI interactiva mejorada
-    "click",           # CLI framework
-    "colorama",        # Colores en Windows terminal
     "pybluez2",        # Bluetooth Classic (opcional)
     "pytest",          # Testing
     "pytest-cov"       # Cobertura de tests

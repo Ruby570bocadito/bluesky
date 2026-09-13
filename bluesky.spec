@@ -61,7 +61,6 @@ a = Analysis(
         'bluesky.utils',
         'bluesky.utils.config',
         'bluesky.utils.format',
-        'bluesky.utils.logger',
         'bluesky.utils.network',
         'bluesky.utils.platform',
         'bluesky.utils.termux',

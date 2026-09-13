@@ -14,6 +14,7 @@ from typing import List, Tuple
 from datetime import datetime
 
 from bluesky.core.engine import BaseModule
+from bluesky.utils.format import severity_icon
 
 
 # ─── Base de conocimientos de vulnerabilidades ───────────────────────────────
@@ -221,18 +222,14 @@ DETECTION_MAP = {
     "sdp_query_hid_service": "_detect_keystroke",
 }
 
-# Severidad por colores
+# Colores ANSI por severidad (presentación de la salida de este módulo).
+# Los ICONOS de severidad vienen de utils.format.severity_icon (fuente
+# única compartida con CLI, consola y el resto de módulos).
 SEV_COLORS = {
     "critical": "\033[31;1m",  # Red bold
     "high": "\033[33;1m",      # Yellow bold
     "medium": "\033[33m",      # Yellow
     "low": "\033[32m",         # Green
-}
-SEV_ICONS = {
-    "critical": "🔴",
-    "high": "🟡",
-    "medium": "🟠",
-    "low": "🟢",
 }
 RESET = "\033[0m"
 
@@ -557,17 +554,17 @@ class VulnScanner(BaseModule):
             "📊  ESTADÍSTICAS:",
             "───────────────────────────────────────────────────────────────",
             f"  Total checks:     {len(found_vulns)}",
-            f"  {SEV_ICONS['critical']} Críticas:        {len(critical)}",
-            f"  {SEV_ICONS['high']} Altas:            {len(high)}",
-            f"  {SEV_ICONS['medium']} Medias:           {len(medium)}",
-            f"  {SEV_ICONS['low']} Bajas:            {len(low)}",
+            f"  {severity_icon('critical')} Críticas:        {len(critical)}",
+            f"  {severity_icon('high')} Altas:            {len(high)}",
+            f"  {severity_icon('medium')} Medias:           {len(medium)}",
+            f"  {severity_icon('low')} Bajas:            {len(low)}",
             "",
             "🎯  VULNERABILIDADES ENCONTRADAS:",
             "───────────────────────────────────────────────────────────────",
         ]
 
         for v in found_vulns:
-            icon = SEV_ICONS.get(v["severity"], "⚪")
+            icon = severity_icon(v["severity"])
             color = SEV_COLORS.get(v["severity"], "")
             lines.append(f"  {icon} {color}{v['id']:20}{RESET} {v['name']}")
             if v.get("cve") and v["cve"] != "No CVE (técnica clásica)":
@@ -588,7 +585,7 @@ class VulnScanner(BaseModule):
             ])
             for i, v in enumerate(found_vulns, 1):
                 lines.append(
-                    f"  {i}. {SEV_ICONS.get(v['severity'], '⚪')} "
+                    f"  {i}. {severity_icon(v['severity'])} "
                     f"bluesky attack {v['module']} {device_info.get('mac', '')}"
                 )
             lines.append("")
@@ -605,7 +602,7 @@ class VulnScanner(BaseModule):
         seen = set()
         for v in found_vulns:
             if v["remediation"] not in seen:
-                recs.append(f"  {SEV_ICONS.get(v['severity'], '⚪')} [{v['id']}] {v['remediation']}")
+                recs.append(f"  {severity_icon(v['severity'])} [{v['id']}] {v['remediation']}")
                 seen.add(v["remediation"])
         return recs
 
