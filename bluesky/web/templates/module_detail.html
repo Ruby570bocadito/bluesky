@@ -30,12 +30,12 @@
   <div class="card">
     <div class="card-title">Ejecución</div>
     {% if info.get('cve') %}
-    <div class="kv" style="margin-bottom:14px">
+    <div class="kv mb-14">
       <span class="k">CVE</span><span class="v mono">{{ info.get('cve') }}</span>
       {% if info.get('cve_url') %}<span class="k">Referencia</span><span class="v"><a class="textlink" href="{{ info.get('cve_url') }}" rel="noopener noreferrer">{{ info.get('cve_url') }}</a></span>{% endif %}
     </div>
     {% endif %}
-    <div class="micro" style="margin-bottom:8px">Opciones</div>
+    <div class="micro mb-8">Opciones</div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Opción</th><th>Descripción</th></tr></thead>
@@ -49,7 +49,7 @@
       </table>
     </div>
     {% if info.get('references') %}
-    <div class="micro" style="margin:14px 0 6px">Referencias</div>
+    <div class="micro mt-14 mb-6">Referencias</div>
     <div class="chips">
       {% for r in info.get('references', []) %}
       <span class="badge">{{ r }}</span>
@@ -60,17 +60,17 @@
 </div>
 
 {% if education %}
-<div class="card" style="margin-top:16px">
+<div class="card mt-16">
   <div class="card-title">
     Modo educativo — {{ education.get('title', '') }}
     <span class="badge accent">paso a paso</span>
   </div>
 
-  <div class="micro" style="margin-bottom:6px">Qué es</div>
-  <p class="muted" style="margin-bottom:16px">{{ education.get('what', '') }}</p>
+  <div class="micro mb-6">Qué es</div>
+  <p class="muted mb-16">{{ education.get('what', '') }}</p>
 
-  <div class="micro" style="margin-bottom:6px">Cómo funciona</div>
-  <div style="margin-bottom:16px">
+  <div class="micro mb-6">Cómo funciona</div>
+  <div class="mb-16">
     {% for step in education.get('how', []) %}
     <div class="edu-step">
       <span class="n">{{ loop.index }}</span>
@@ -79,17 +79,17 @@
     {% endfor %}
   </div>
 
-  <div class="micro" style="margin-bottom:6px">Impacto</div>
-  <p class="muted" style="margin-bottom:16px">{{ education.get('impact', '') }}</p>
+  <div class="micro mb-6">Impacto</div>
+  <p class="muted mb-16">{{ education.get('impact', '') }}</p>
 
-  <div class="micro" style="margin-bottom:6px">Mitigación — cómo defenderse</div>
+  <div class="micro mb-6">Mitigación — cómo defenderse</div>
   {% for m in education.get('mitigation', []) %}
   <div class="edu-mit"><span class="tick">✓</span><span class="t">{{ m }}</span></div>
   {% endfor %}
 
   {% if education.get('references') %}
   <hr class="sep">
-  <div class="micro" style="margin-bottom:6px">Referencias</div>
+  <div class="micro mb-6">Referencias</div>
   <div class="chips">
     {% for r in education.get('references', []) %}
     <span class="badge">{{ r }}</span>

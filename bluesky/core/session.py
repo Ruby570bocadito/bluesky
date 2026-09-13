@@ -109,6 +109,14 @@ class Session:
         self._save()
         return result
 
+    def save(self):
+        """Guarda la sesión a disco (API pública).
+
+        Los callers externos (CLI, consola) deben usar ``save()``;
+        ``_save()`` se conserva como alias interno por compatibilidad.
+        """
+        self._save()
+
     def _save(self):
         """Guarda la sesión a disco."""
         data = {

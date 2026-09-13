@@ -28,6 +28,11 @@ import logging
 from typing import List, Tuple
 
 from bluesky.core.engine import BaseModule
+from bluesky.utils.bt_tools import (
+    close_hci_socket,
+    open_hci_socket,
+    scapy_unavailable_message,
+)
 
 log = logging.getLogger("bluesky.bluffs")
 
@@ -39,7 +44,6 @@ try:
         HCI_ACL_Hdr, L2CAP_Hdr, L2CAP_CmdHdr, L2CAP_ConfReq, L2CAP_ConfResp,
         HCI_Cmd_Read_BD_Addr, HCI_Cmd_Reset, HCI_Cmd_Write_Connect_Accept_Timeout,
         SM_Pairing_Request, SM_Pairing_Response, SM_Hdr,
-        BluetoothHCISocket,
         HCI_Cmd_Set_Connection_Encryption,
     )
     from scapy.layers.bluetooth4LE import (
@@ -424,10 +428,8 @@ class Bluffs(BaseModule):
 
     def _no_scapy_result(self, mac: str) -> dict:
         """Resultado honesto cuando scapy no está instalado."""
-        self.result["data"]["message"] = (
-            "❌ BLUFFS activo requiere scapy (no instalado).\n"
-            "   Instala: pip install scapy\n"
-            "   Alternativa: detección pasiva sin EXECUTE=True"
+        self.result["data"]["message"] = scapy_unavailable_message(
+            "BLUFFS activo", alternative="detección pasiva sin EXECUTE=True"
         )
         self.result["data"]["attack_result"] = "unavailable"
         self.result["data"]["requires"] = ["scapy (pip install scapy)"]
@@ -601,21 +603,12 @@ class Bluffs(BaseModule):
     # ─── Operaciones HCI ─────────────────────────────────────────────────────
 
     def _open_hci_socket(self) -> bool:
-        try:
-            dev_id = int(self._hci_device.replace("hci", ""))
-            self._hci_socket = BluetoothHCISocket(dev_id)
-            return True
-        except Exception as e:
-            log.warning(f"No se pudo abrir HCI socket: {e}")
-            return False
+        self._hci_socket = open_hci_socket(self._hci_device)
+        return self._hci_socket is not None
 
     def _close_hci_socket(self):
-        if self._hci_socket:
-            try:
-                self._hci_socket.close()
-            except Exception:
-                pass
-            self._hci_socket = None
+        close_hci_socket(self._hci_socket)
+        self._hci_socket = None
 
     # ─── Prerrequisitos ──────────────────────────────────────────────────────
 

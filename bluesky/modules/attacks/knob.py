@@ -28,6 +28,11 @@ import logging
 from typing import Dict, Optional, Tuple
 
 from bluesky.core.engine import BaseModule
+from bluesky.utils.bt_tools import (
+    close_hci_socket,
+    open_hci_socket,
+    scapy_unavailable_message,
+)
 
 log = logging.getLogger("bluesky.knob")
 
@@ -43,7 +48,6 @@ try:
         HCI_Cmd_Read_BD_Addr, HCI_Cmd_Reset,
         HCI_ACL_Hdr, L2CAP_Hdr, L2CAP_ConfReq, L2CAP_ConfResp,
         L2CAP_ConnReq, L2CAP_ConnResp, L2CAP_CmdHdr, L2CAP_CmdRej,
-        BluetoothHCISocket,
     )
     # Sondeo de disponibilidad de la pila HCI/L2CAP de scapy.
     _SCAPY_PROBE = (
@@ -385,10 +389,8 @@ class Knob(BaseModule):
 
     def _no_scapy_result(self, mac: str) -> dict:
         """Resultado honesto cuando scapy no está instalado."""
-        self.result["data"]["message"] = (
-            "❌ KNOB activo requiere scapy (no instalado).\n"
-            "   Instala: pip install scapy\n"
-            "   Alternativa: verificación pasiva sin EXECUTE=True"
+        self.result["data"]["message"] = scapy_unavailable_message(
+            "KNOB activo", alternative="verificación pasiva sin EXECUTE=True"
         )
         self.result["data"]["attack_result"] = "unavailable"
         self.result["data"]["requires"] = ["scapy (pip install scapy)"]
@@ -437,22 +439,13 @@ class Knob(BaseModule):
 
     def _open_hci_socket(self) -> bool:
         """Abre socket HCI raw para inyección de paquetes."""
-        try:
-            dev_id = int(self._hci_device.replace("hci", ""))
-            self._hci_socket = BluetoothHCISocket(dev_id)
-            return True
-        except Exception as e:
-            log.warning(f"No se pudo abrir HCI socket {self._hci_device}: {e}")
-            return False
+        self._hci_socket = open_hci_socket(self._hci_device)
+        return self._hci_socket is not None
 
     def _close_hci_socket(self):
         """Cierra el socket HCI."""
-        if self._hci_socket:
-            try:
-                self._hci_socket.close()
-            except Exception:
-                pass
-            self._hci_socket = None
+        close_hci_socket(self._hci_socket)
+        self._hci_socket = None
 
     def _capture_pairing(self, mac: str) -> dict:
         """Espera y captura eventos de pairing del target.

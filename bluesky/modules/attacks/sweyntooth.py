@@ -28,6 +28,7 @@ import logging
 from typing import Dict, Any, List, Tuple
 
 from bluesky.core.engine import BaseModule
+from bluesky.utils.bt_tools import close_hci_socket, open_hci_socket
 
 log = logging.getLogger("bluesky.sweyntooth")
 
@@ -44,7 +45,7 @@ try:
         ATT_Hdr, ATT_Read_By_Group_Type_Request, ATT_Read_By_Type_Request,
         ATT_Read_Request, ATT_Error_Response, ATT_Exchange_MTU_Request,
         SM_Hdr, SM_Pairing_Request, SM_Pairing_Response,
-        BluetoothHCISocket, HCI_Hdr, HCI_Event_Hdr,
+        HCI_Hdr, HCI_Event_Hdr,
         HCI_Cmd_LE_Set_Scan_Parameters, HCI_Cmd_LE_Set_Scan_Enable,
         HCI_Cmd_LE_Set_Advertising_Parameters,
         HCI_Cmd_LE_Set_Advertising_Data,
@@ -516,21 +517,12 @@ class Sweyntooth(BaseModule):
     # ─── HCI ─────────────────────────────────────────────────────────────────
 
     def _open_hci_socket(self) -> bool:
-        try:
-            dev_id = int(self._hci_device.replace("hci", ""))
-            self._hci_socket = BluetoothHCISocket(dev_id)
-            return True
-        except Exception as e:
-            log.debug(f"HCI socket error: {e}")
-            return False
+        self._hci_socket = open_hci_socket(self._hci_device)
+        return self._hci_socket is not None
 
     def _close_hci_socket(self):
-        if self._hci_socket:
-            try:
-                self._hci_socket.close()
-            except Exception:
-                pass
-            self._hci_socket = None
+        close_hci_socket(self._hci_socket)
+        self._hci_socket = None
 
     # ─── Prerrequisitos ──────────────────────────────────────────────────────
 

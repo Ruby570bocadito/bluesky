@@ -11,7 +11,7 @@
 </div>
 
 <div class="card">
-  <form method="get" action="/modules" class="form-row" style="margin-bottom:16px">
+  <form method="get" action="/modules" class="form-row mb-16">
     <label class="field">
       <span class="micro">Buscar</span>
       <input type="text" name="search" value="{{ search }}" placeholder="nombre, descripción, CVE…">
@@ -25,7 +25,7 @@
         {% endfor %}
       </select>
     </label>
-    <div style="display:flex; gap:8px">
+    <div class="form-actions">
       <button type="submit" class="btn">Filtrar</button>
       <a href="/modules" class="btn ghost">Limpiar</a>
     </div>

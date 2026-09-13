@@ -41,13 +41,13 @@
     </label>
     <button class="btn" id="scan-btn">Iniciar escaneo</button>
   </div>
-  <p class="faint" style="margin-top:10px; font-size:12px">
+  <p class="faint mt-10 fs-12">
     Solo escanea dispositivos propios o con autorización expresa. Sin hardware Bluetooth,
     el escaneo terminará con un aviso del adaptador.
   </p>
 </div>
 
-<div class="card" style="margin-top:16px">
+<div class="card mt-16">
   <div class="card-title">Dispositivos descubiertos</div>
   <div id="devices-empty" class="empty"><span class="big">🔎</span>Aún no hay dispositivos. Lanza un escaneo de dispositivos para verlos aquí, con su fabricante (OUI).</div>
   <div class="table-wrap" id="devices-table" style="display:none">
@@ -56,16 +56,16 @@
       <tbody id="devices-body"></tbody>
     </table>
   </div>
-  <div class="form-row" style="margin-top:12px">
+  <div class="form-row mt-12">
     <button class="btn" id="scan-export" disabled>Exportar CSV</button>
-    <span class="faint" style="font-size:12px; align-self:center">Dispositivos del último escaneo, listos para hoja de cálculo</span>
+    <span class="faint fs-12 self-center">Dispositivos del último escaneo, listos para hoja de cálculo</span>
   </div>
 </div>
 
-<div class="card" style="margin-top:16px">
+<div class="card mt-16">
   <div class="card-title">Resultados</div>
-  {% if scan_results %}
-  <div class="table-wrap">
+  <div class="empty" id="scan-empty" {% if scan_results %}style="display:none"{% endif %}><span class="big">📡</span>Sin escaneos todavía. Configura el formulario y pulsa Iniciar.</div>
+  <div class="table-wrap" id="scan-table" {% if not scan_results %}style="display:none"{% endif %}>
     <table>
       <thead><tr><th>Hora</th><th>Escáner</th><th>Target</th><th>Estado</th><th>Detalle</th></tr></thead>
       <tbody id="scan-results">
@@ -81,14 +81,5 @@
       </tbody>
     </table>
   </div>
-  {% else %}
-  <div class="empty" id="scan-empty"><span class="big">📡</span>Sin escaneos todavía. Configura el formulario y pulsa Iniciar.</div>
-  <div class="table-wrap" id="scan-table" style="display:none">
-    <table>
-      <thead><tr><th>Hora</th><th>Escáner</th><th>Target</th><th>Estado</th><th>Detalle</th></tr></thead>
-      <tbody id="scan-results"></tbody>
-    </table>
-  </div>
-  {% endif %}
 </div>
 {% endblock %}

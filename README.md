@@ -68,6 +68,8 @@ En Termux: `bash scripts/install_termux.sh` · En Windows: `scripts/install_wind
 
 Dependencias opcionales según lo que quieras ejecutar (todas documentadas en cada módulo): `scapy` (ataques activos), `pybluez` (envío L2CAP de BlueFrag), `cryptography` (AES de Crackle), herramienta `btlejack` (hijacking BLE), `bluez-hcidump` (capturas).
 
+Scripts auxiliares: `scripts/bluesky-termux.sh` (launcher en Termux) y `scripts/build_pyinstaller.sh` (binario standalone; genera su propio spec).
+
 ## Inicio rápido
 
 ```bash

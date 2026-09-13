@@ -88,12 +88,12 @@ class BlueskyConsole(cmd.Cmd):
         """Muestra barra de estado."""
         if not self.console:
             return
-        mod_name = self.current_module or "none"
-        target = self.module_target or "not set"
+        mod_name = self.current_module or "(ninguno)"
+        target = self.module_target or "(no establecido)"
         n_mods = len(self.engine.list_modules())
-        status = f"[bold]Module:[/] [cyan]{mod_name}[/]  "
+        status = f"[bold]Módulo:[/] [cyan]{mod_name}[/]  "
         status += f"[bold]Target:[/] [yellow]{target}[/]  "
-        status += f"[bold]Modules:[/] [green]{n_mods}[/]"
+        status += f"[bold]Módulos:[/] [green]{n_mods}[/]"
         self.console.print(Panel(status, style="dim"))
 
     # ─── Comandos principales ──────────────────────────────
@@ -143,12 +143,12 @@ class BlueskyConsole(cmd.Cmd):
         if self.console:
             self.console.print(Panel(
                 f"[bold]{info.get('name')}[/] - {info.get('description')}\n"
-                f"Severity: {severity_icon(info.get('severity',''))} {info.get('severity','').title()}  |  "
+                f"Severidad: {severity_icon(info.get('severity',''))} {info.get('severity','').title()}  |  "
                 f"Target: {target_type_icon(info.get('target_type',''))} {info.get('target_type','').upper()}  |  "
                 f"CVE: {info.get('cve', 'N/A')}\n"
-                f"Hardware: {', '.join(info.get('requires_hardware',[])) or 'None'}  |  "
-                f"Root: {'Yes' if info.get('requires_root') else 'No'}",
-                title=f"[bold cyan]Module: {arg}[/]",
+                f"Hardware: {', '.join(info.get('requires_hardware',[])) or 'Ninguno'}  |  "
+                f"Root: {'sí' if info.get('requires_root') else 'no'}",
+                title=f"[bold cyan]Módulo: {arg}[/]",
                 border_style="cyan"
             ))
 
@@ -200,11 +200,11 @@ class BlueskyConsole(cmd.Cmd):
             print()
 
         if self.console:
-            self.console.print(f"[bold]Running module:[/] [cyan]{self.current_module}[/]")
+            self.console.print(f"[bold]Ejecutando módulo:[/] [cyan]{self.current_module}[/]")
             if target:
                 self.console.print(f"[bold]Target:[/] [yellow]{target}[/]")
             if self.module_options:
-                self.console.print(f"[bold]Options:[/] {self.module_options}")
+                self.console.print(f"[bold]Opciones:[/] {self.module_options}")
 
         result = self.engine.run_module(
             self.current_module,
@@ -233,13 +233,13 @@ class BlueskyConsole(cmd.Cmd):
             # Panel principal
             if result.get("success"):
                 self.console.print(Panel(
-                    "[green]Module executed successfully[/]",
-                    title="Result", border_style="green"
+                    "[green]Módulo ejecutado correctamente[/]",
+                    title="Resultado", border_style="green"
                 ))
             else:
                 self.console.print(Panel(
-                    "[yellow]Module completed with notes[/]",
-                    title="Result", border_style="yellow"
+                    "[yellow]Módulo completado con notas[/]",
+                    title="Resultado", border_style="yellow"
                 ))
 
             # Mostrar mensajes/vulnerabilidades
@@ -251,9 +251,9 @@ class BlueskyConsole(cmd.Cmd):
             # Tabla de vulnerabilidades
             vulns = data.get("vulnerabilities", [])
             if vulns:
-                table = Table(title="Vulnerabilities Detected", border_style="red")
-                table.add_column("Name", style="cyan")
-                table.add_column("Severity", style="bold")
+                table = Table(title="Vulnerabilidades detectadas", border_style="red")
+                table.add_column("Nombre", style="cyan")
+                table.add_column("Severidad", style="bold")
                 table.add_column("CVE", style="dim")
                 for v in vulns:
                     table.add_row(
@@ -323,11 +323,11 @@ class BlueskyConsole(cmd.Cmd):
                 s = m.get("severity", "low")
                 by_sev.setdefault(s, []).append(m)
 
-            table = Table(title=f"Available Modules ({len(modules)} total)", border_style="cyan")
+            table = Table(title=f"Módulos disponibles ({len(modules)} en total)", border_style="cyan")
             table.add_column("", style="bold", width=2)
-            table.add_column("Name", style="cyan", width=16)
-            table.add_column("Type", width=6)
-            table.add_column("Description", style="white")
+            table.add_column("Nombre", style="cyan", width=16)
+            table.add_column("Tipo", width=6)
+            table.add_column("Descripción", style="white")
             table.add_column("CVE", style="dim")
 
             for severity in ["critical", "high", "medium", "low"]:
@@ -373,11 +373,11 @@ class BlueskyConsole(cmd.Cmd):
             return
 
         if self.console:
-            table = Table(title=f"Search Results: '{arg}' ({len(results)} matches)", border_style="cyan")
+            table = Table(title=f"Resultados de búsqueda: '{arg}' ({len(results)} coincidencias)", border_style="cyan")
             table.add_column("", width=2)
-            table.add_column("Name", style="cyan", width=16)
-            table.add_column("Type", width=6)
-            table.add_column("Description", width=50)
+            table.add_column("Nombre", style="cyan", width=16)
+            table.add_column("Tipo", width=6)
+            table.add_column("Descripción", width=50)
             table.add_column("CVE", style="dim", width=20)
             for m in results:
                 table.add_row(
@@ -416,20 +416,20 @@ class BlueskyConsole(cmd.Cmd):
             info = inst.get_info()
 
             if self.console:
-                content = f"[bold]Module:[/] [cyan]{self.current_module}[/]\n"
+                content = f"[bold]Módulo:[/] [cyan]{self.current_module}[/]\n"
                 content += f"[bold]Target:[/] [yellow]{target}[/]\n\n"
-                content += f"[bold]Prerequisites:[/] {'[green]✅ OK[/]' if ok else '[red]❌ FAIL[/]'}\n"
+                content += f"[bold]Prerrequisitos:[/] {'[green]✅ OK[/]' if ok else '[red]❌ Fallo[/]'}\n"
                 if msg:
-                    content += f"[bold]Message:[/] {msg}\n"
-                content += f"\n[bold]Target Type:[/] {info.get('target_type','?').upper()}\n"
-                content += f"[bold]Severity:[/] {severity_icon(info.get('severity',''))} {info.get('severity','').title()}\n"
+                    content += f"[bold]Mensaje:[/] {msg}\n"
+                content += f"\n[bold]Tipo de target:[/] {info.get('target_type','?').upper()}\n"
+                content += f"[bold]Severidad:[/] {severity_icon(info.get('severity',''))} {info.get('severity','').title()}\n"
                 content += f"[bold]CVE:[/] {info.get('cve', 'N/A')}\n"
-                content += f"[bold]Requires Root:[/] {'Yes' if info.get('requires_root') else 'No'}\n"
+                content += f"[bold]Requiere root:[/] {'sí' if info.get('requires_root') else 'no'}\n"
                 if info.get("requires_hardware"):
                     content += f"[bold]Hardware:[/] {', '.join(info['requires_hardware'])}\n"
-                self.console.print(Panel(content, title="Check Results", border_style="green" if ok else "red"))
+                self.console.print(Panel(content, title="Verificación", border_style="green" if ok else "red"))
             else:
-                print(f"\n  Check: {self.current_module} → {target}")
+                print(f"\n  Verificación: {self.current_module} → {target}")
                 print(f"  Prerequisitos: {'✅ OK' if ok else '❌ Fallo'}")
                 if msg:
                     print(f"  Mensaje: {msg}")
@@ -456,12 +456,12 @@ class BlueskyConsole(cmd.Cmd):
             self.console.print(Panel(
                 f"[bold]{info.get('name')}[/]\n\n"
                 f"[dim]{info.get('description')}[/]\n\n"
-                f"[bold]Severity:[/] {severity_icon(info.get('severity',''))} {info.get('severity','').title()}\n"
-                f"[bold]Target Type:[/] {target_type_icon(info.get('target_type',''))} {info.get('target_type','').upper()}\n"
+                f"[bold]Severidad:[/] {severity_icon(info.get('severity',''))} {info.get('severity','').title()}\n"
+                f"[bold]Tipo de target:[/] {target_type_icon(info.get('target_type',''))} {info.get('target_type','').upper()}\n"
                 f"[bold]CVE:[/] {info.get('cve', 'N/A')}\n"
-                f"[bold]Requires Root:[/] {'Yes' if info.get('requires_root') else 'No'}\n"
-                f"[bold]Hardware Required:[/] {', '.join(info.get('requires_hardware',[])) or 'None (built-in BT)'}\n"
-                f"[bold]Version:[/] {info.get('version', '?')}",
+                f"[bold]Requiere root:[/] {'sí' if info.get('requires_root') else 'no'}\n"
+                f"[bold]Hardware requerido:[/] {', '.join(info.get('requires_hardware',[])) or 'Ninguno (BT integrado)'}\n"
+                f"[bold]Versión:[/] {info.get('version', '?')}",
                 title=f"[bold cyan]{info.get('name')}[/]",
                 border_style="cyan"
             ))
@@ -530,36 +530,36 @@ class BlueskyConsole(cmd.Cmd):
             if self.current_module and self.current_module_info:
                 mod_opts = self.current_module_info.get("module_options", {})
                 if self.console:
-                    table = Table(title=f"Options for {self.current_module}", border_style="blue")
-                    table.add_column("Option", style="cyan", width=14)
-                    table.add_column("Value", style="yellow", width=24)
-                    table.add_column("Description", style="dim")
-                    table.add_column("Required", style="bold", width=10)
-                    table.add_row("TARGET", self.module_target or "(not set)", "Target MAC address", "Yes")
+                    table = Table(title=f"Opciones de {self.current_module}", border_style="blue")
+                    table.add_column("Opción", style="cyan", width=14)
+                    table.add_column("Valor", style="yellow", width=24)
+                    table.add_column("Descripción", style="dim")
+                    table.add_column("Obligatorio", style="bold", width=10)
+                    table.add_row("TARGET", self.module_target or "(no establecido)", "MAC del target", "Sí")
                     for k, v in self.module_options.items():
                         desc = mod_opts.get(k.upper(), mod_opts.get(k.lower(), ""))
-                        table.add_row(k.upper(), v or "(not set)", desc, "No")
+                        table.add_row(k.upper(), v or "(no establecido)", desc, "No")
                     for k, desc in mod_opts.items():
                         k_upper = k.upper()
                         if k_upper in ("TARGET", "RHOST"):
                             continue
                         if k_upper not in [o.upper() for o in self.module_options.keys()]:
-                            table.add_row(k_upper, "(not set)", desc, "No")
+                            table.add_row(k_upper, "(no establecido)", desc, "No")
                     self.console.print(table)
                 else:
                     print(f"\n  Opciones para {self.current_module}:")
-                    print(f"    TARGET = {self.module_target or '(not set)'}")
+                    print(f"    TARGET = {self.module_target or '(no establecido)'}")
                     for k, v in self.module_options.items():
-                        print(f"    {k.upper()} = {v or '(not set)'}")
+                        print(f"    {k.upper()} = {v or '(no establecido)'}")
             else:
                 print("  No hay módulo seleccionado")
 
         elif what == "targets" or what == "hosts":
             if self.targets_cache:
                 if self.console:
-                    table = Table(title="Known Targets", border_style="green")
+                    table = Table(title="Targets conocidos", border_style="green")
                     table.add_column("#", style="dim")
-                    table.add_column("Name", style="cyan")
+                    table.add_column("Nombre", style="cyan")
                     table.add_column("MAC", style="green")
                     for i, t in enumerate(self.targets_cache, 1):
                         table.add_row(str(i), t.get("name","?"), t.get("mac","N/A"))
@@ -575,7 +575,7 @@ class BlueskyConsole(cmd.Cmd):
             self._show_advanced_info()
 
         else:
-            print("  Uso: show [modules|options|targets|advanced]")
+            print("  Uso: show [módulos|options|targets|advanced]")
 
     def _show_advanced_info(self):
         """Muestra información avanzada: CVE, exploits, referencias."""
@@ -592,9 +592,9 @@ class BlueskyConsole(cmd.Cmd):
         author = info.get("author", "?")
 
         if self.console:
-            content = f"[bold]Module:[/] [cyan]{info.get('name')}[/]\n"
-            content += f"[bold]Author:[/] {author}\n"
-            content += f"[bold]Version:[/] {version}\n\n"
+            content = f"[bold]Módulo:[/] [cyan]{info.get('name')}[/]\n"
+            content += f"[bold]Autor:[/] {author}\n"
+            content += f"[bold]Versión:[/] {version}\n\n"
 
             if cve:
                 content += f"[bold]CVE:[/] [red]{cve}[/]\n"
@@ -603,19 +603,19 @@ class BlueskyConsole(cmd.Cmd):
             content += "\n"
 
             if exploits:
-                content += "[bold]Exploit Links:[/]\n"
+                content += "[bold]Enlaces de exploits:[/]\n"
                 for e in exploits:
                     content += f"  • [blue]{e}[/]\n"
 
             if refs:
-                content += "\n[bold]References:[/]\n"
+                content += "\n[bold]Referencias:[/]\n"
                 for r in refs:
                     content += f"  • [blue]{r}[/]\n"
 
-            self.console.print(Panel(content, title="Advanced Info", border_style="magenta"))
+            self.console.print(Panel(content, title="Info avanzada", border_style="magenta"))
         else:
-            print(f"\n  [{info.get('name')}] Advanced Info")
-            print(f"  Author: {author}  |  Version: {version}")
+            print(f"\n  [{info.get('name')}] Info avanzada")
+            print(f"  Autor: {author}  |  Versión: {version}")
             if cve:
                 print(f"  CVE: {cve}")
                 if cve_url:
@@ -625,7 +625,7 @@ class BlueskyConsole(cmd.Cmd):
                 for e in exploits:
                     print(f"    • {e}")
             if refs:
-                print("  References:")
+                print("  Referencias:")
                 for r in refs:
                     print(f"    • {r}")
         print()
@@ -642,7 +642,7 @@ class BlueskyConsole(cmd.Cmd):
         print(f"  {colorize('🔍', 'cyan')} Escaneando vulnerabilidades de {target}...")
 
         if self.console:
-            with self.console.status("[bold cyan]Scanning vulnerabilities..."):
+            with self.console.status("[bold cyan]Escaneando vulnerabilidades..."):
                 result = self.engine.run_module("vuln", target=target)
         else:
             result = self.engine.run_module("vuln", target=target)
@@ -679,7 +679,7 @@ class BlueskyConsole(cmd.Cmd):
         print(f"  {colorize('⚡', 'cyan')} Autopilot mode={mode} target={target or 'all'}")
 
         if self.console:
-            with self.console.status("[bold cyan]Running Autopilot..."):
+            with self.console.status("[bold cyan]Ejecutando Autopilot..."):
                 result = self.engine.run_module(
                     "autopilot",
                     target=target,
@@ -757,8 +757,8 @@ class BlueskyConsole(cmd.Cmd):
             sessions = Session.list_sessions()
             if sessions:
                 if self.console:
-                    table = Table(title="Saved Sessions", border_style="blue")
-                    table.add_column("Name", style="cyan")
+                    table = Table(title="Sesiones guardadas", border_style="blue")
+                    table.add_column("Nombre", style="cyan")
                     for s in sessions:
                         table.add_row(s)
                     self.console.print(table)
@@ -769,7 +769,7 @@ class BlueskyConsole(cmd.Cmd):
 
         elif args[0] == "save" and len(args) >= 2:
             self.session.name = args[1]
-            self.session._save()
+            self.session.save()
             print(f"  {colorize(f'✅ Sesión guardada: {args[1]}', 'green')}")
 
         elif args[0] == "load" and len(args) >= 2:
@@ -783,12 +783,12 @@ class BlueskyConsole(cmd.Cmd):
             summary = self.session.summary()
             if self.console:
                 self.console.print(Panel(
-                    f"[bold]Name:[/] {summary.get('name','N/A')}\n"
+                    f"[bold]Nombre:[/] {summary.get('name','N/A')}\n"
                     f"[bold]Targets:[/] {summary.get('total_targets',0)}\n"
-                    f"[bold]Results:[/] {summary.get('total_results',0)}\n"
-                    f"[bold]Successful:[/] [green]{summary.get('successful_attacks',0)}[/]\n"
-                    f"[bold]Failed:[/] [red]{summary.get('failed_attacks',0)}[/]",
-                    title="Session Summary", border_style="blue"
+                    f"[bold]Resultados:[/] {summary.get('total_results',0)}\n"
+                    f"[bold]Éxitos:[/] [green]{summary.get('successful_attacks',0)}[/]\n"
+                    f"[bold]Fallos:[/] [red]{summary.get('failed_attacks',0)}[/]",
+                    title="Resumen de sesión", border_style="blue"
                 ))
             else:
                 print(f"\n  Sesión: {summary.get('name','N/A')}")
@@ -864,8 +864,8 @@ class BlueskyConsole(cmd.Cmd):
         if not args or args[0] == "show":
             if self.console:
                 all_cfg = self.config.get_all()
-                content = f"[bold]Config file:[/] [dim]{self.config._path or '(defaults)'}[/]\n"
-                content += f"[bold]Dirty:[/] {'[yellow]Yes[/]' if self.config.is_dirty() else '[green]No[/]'}\n\n"
+                content = f"[bold]Archivo de configuración:[/] [dim]{self.config.path or '(predeterminados)'}[/]\n"
+                content += f"[bold]Modificado:[/] {'[yellow]sí[/]' if self.config.is_dirty() else '[green]no[/]'}\n\n"
 
                 for section_key, section_val in all_cfg.items():
                     if isinstance(section_val, dict):
@@ -884,7 +884,7 @@ class BlueskyConsole(cmd.Cmd):
                     elif isinstance(section_val, list):
                         content += f"[bold]{section_key}[/]: [dim]{len(section_val)} items[/]\n"
 
-                self.console.print(Panel(content, title="Configuration", border_style="blue"))
+                self.console.print(Panel(content, title="Configuración", border_style="blue"))
             else:
                 print(self.config.export_summary())
             return
@@ -895,16 +895,16 @@ class BlueskyConsole(cmd.Cmd):
                 key, value = parse_key_value(args[1])
                 old = self.config.get(key)
                 self.config.set(key, value)
-                print(f"  {colorize('✅', 'green')} {key} = {value}  (previous: {old})")
-                print(f"  {colorize('⚠️', 'yellow')} Use 'config save' to persist")
+                print(f"  {colorize('✅', 'green')} {key} = {value}  (anterior: {old})")
+                print(f"  {colorize('⚠️', 'yellow')} Usa 'config save' para persistir")
             except ValueError as e:
                 print(f"  {colorize('✘', 'red')} {e}")
         elif action == "save":
             self.config.save()
-            print(f"  {colorize('✅', 'green')} Config saved to {self.config._path}")
+            print(f"  {colorize('✅', 'green')} Configuración guardada en {self.config.path}")
         elif action == "reset":
             self.config.reset_to_defaults()
-            print(f"  {colorize('🔄', 'yellow')} Config reset to defaults")
+            print(f"  {colorize('🔄', 'yellow')} Configuración restablecida a los valores por defecto")
         else:
             print(f"  {colorize('Uso:', 'bold')} config [show|set <kv>|save|reset]")
 

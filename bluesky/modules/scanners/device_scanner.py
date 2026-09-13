@@ -251,6 +251,55 @@ class DeviceScanner(BaseModule):
 
         return devices
 
+    # ─── Helpers de parseo compartidos ──────────────────────
+
+    def _parse_bluetoothctl_devices(self, output: str, dev_type: str) -> List[dict]:
+        """Extrae dispositivos del output de `bluetoothctl scan on`.
+
+        Cada línea de descubrimiento tiene la forma
+        ``[CHG] Device AA:BB:CC:DD:EE:FF Nombre``. Deduplica por MAC.
+        """
+        devices = []
+        for line in output.split("\n"):
+            if "Device" in line:
+                parts = line.split("Device", 1)[1].strip().split(" ", 1)
+                if len(parts) >= 1:
+                    mac = parts[0].strip()
+                    name = parts[1].strip() if len(parts) > 1 else "Unknown"
+                    if not any(d["mac"] == mac for d in devices):
+                        devices.append({
+                            "mac": mac,
+                            "name": name,
+                            "type": dev_type,
+                            "rssi": 0,
+                        })
+        return devices
+
+    def _parse_hcitool_devices(self, output: str, dev_type: str,
+                               filter_substring: str = "") -> List[dict]:
+        """Extrae dispositivos de líneas ``MAC [Nombre]`` de hcitool.
+
+        Ignora la primera línea (cabecera). Para `lescan --duplicates`,
+        las repeticiones de la cabecera "LE Scan..." se filtran vía
+        ``filter_substring``. Deduplica por MAC.
+        """
+        devices = []
+        for line in output.split("\n")[1:]:
+            line = line.strip()
+            if not line or (filter_substring and filter_substring in line):
+                continue
+            parts = line.split(None, 1)
+            mac = parts[0]
+            name = parts[1] if len(parts) > 1 else "Unknown"
+            if not any(d["mac"] == mac for d in devices):
+                devices.append({
+                    "mac": mac,
+                    "name": name,
+                    "type": dev_type,
+                    "rssi": 0,
+                })
+        return devices
+
     # ─── Linux Backend (existente) ──────────────────────────
 
     def _scan_classic(self, timeout: int) -> List[dict]:
@@ -263,19 +312,7 @@ class DeviceScanner(BaseModule):
                 ["bluetoothctl", "--timeout", str(timeout), "scan", "on"],
                 capture_output=True, text=True, timeout=timeout + 3
             )
-            for line in result.stdout.split("\n"):
-                if "Device" in line:
-                    parts = line.split("Device", 1)[1].strip().split(" ", 1)
-                    if len(parts) >= 1:
-                        mac = parts[0].strip()
-                        name = parts[1].strip() if len(parts) > 1 else "Unknown"
-                        if not any(d["mac"] == mac for d in devices):
-                            devices.append({
-                                "mac": mac,
-                                "name": name,
-                                "type": "classic",
-                                "rssi": 0,
-                            })
+            devices = self._parse_bluetoothctl_devices(result.stdout, "classic")
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
@@ -286,19 +323,7 @@ class DeviceScanner(BaseModule):
                     ["hcitool", "scan"],
                     capture_output=True, text=True, timeout=timeout + 2
                 )
-                for line in result.stdout.split("\n")[1:]:
-                    if line.strip():
-                        parts = line.strip().split(None, 1)
-                        if len(parts) >= 1:
-                            mac = parts[0]
-                            name = parts[1] if len(parts) > 1 else "Unknown"
-                            if not any(d["mac"] == mac for d in devices):
-                                devices.append({
-                                    "mac": mac,
-                                    "name": name,
-                                    "type": "classic",
-                                    "rssi": 0,
-                                })
+                devices = self._parse_hcitool_devices(result.stdout, "classic")
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
 
@@ -314,19 +339,9 @@ class DeviceScanner(BaseModule):
                 ["hcitool", "lescan", "--duplicates"],
                 capture_output=True, text=True, timeout=timeout + 2
             )
-            for line in result.stdout.split("\n")[1:]:
-                if line.strip() and "LE Scan" not in line:
-                    parts = line.strip().split(None, 1)
-                    if len(parts) >= 1:
-                        mac = parts[0]
-                        name = parts[1] if len(parts) > 1 else "Unknown"
-                        if not any(d["mac"] == mac for d in devices):
-                            devices.append({
-                                "mac": mac,
-                                "name": name,
-                                "type": "ble",
-                                "rssi": 0,
-                            })
+            devices = self._parse_hcitool_devices(
+                result.stdout, "ble", filter_substring="LE Scan"
+            )
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
@@ -337,19 +352,7 @@ class DeviceScanner(BaseModule):
                     ["bluetoothctl", "--timeout", str(timeout), "scan", "on"],
                     capture_output=True, text=True, timeout=timeout + 3
                 )
-                for line in result.stdout.split("\n"):
-                    if "Device" in line:
-                        parts = line.split("Device", 1)[1].strip().split(" ", 1)
-                        if len(parts) >= 1:
-                            mac = parts[0].strip()
-                            name = parts[1].strip() if len(parts) > 1 else "Unknown"
-                            if not any(d["mac"] == mac for d in devices):
-                                devices.append({
-                                    "mac": mac,
-                                    "name": name,
-                                    "type": "ble",
-                                    "rssi": 0,
-                                })
+                devices = self._parse_bluetoothctl_devices(result.stdout, "ble")
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 pass
 

@@ -994,7 +994,7 @@ def cmd_session(args: list):
 
     if ns.action == "save":
         session.name = ns.name
-        session._save()
+        session.save()
         _p()
         _p(f"  {_c('OK', 'green')} Sesión guardada: {ns.name}")
         _p()
@@ -1065,7 +1065,7 @@ def cmd_config(args: list):
     if ns.action in (None, "show"):
         _p()
         _p(separator(title=" Configuración "))
-        _p(f"  Archivo: {_c(str(cfg._path or '(defaults)'), 'dim')}")
+        _p(f"  Archivo: {_c(str(cfg.path or '(predeterminados)'), 'dim')}")
         _p(f"  Modificado: {_c('sí' if cfg.is_dirty() else 'no', 'dim')}")
         _p()
 
@@ -1116,7 +1116,7 @@ def cmd_config(args: list):
         try:
             cfg.save()
             _p()
-            _p(f"  {_c('OK', 'green')} Configuración guardada en: {cfg._path}")
+            _p(f"  {_c('OK', 'green')} Configuración guardada en: {cfg.path}")
             _p()
             return 0
         except Exception as e:

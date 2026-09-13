@@ -258,6 +258,16 @@ class BlueskyConfig:
 
     # ── Acceso a valores ─────────────────────────────────────────────────────
 
+    @property
+    def path(self) -> Optional[Path]:
+        """Ruta del archivo de configuración en uso (``None`` si hay defaults).
+
+        API pública recomendada frente al atributo interno ``_path``:
+        la CLI y la consola la usan para mostrar al usuario dónde se
+        cargará/guardará la configuración.
+        """
+        return self._path
+
     def _get_nested(self, key: str) -> Any:
         """Acceso anidado con notación de puntos: 'general.timeout'."""
         parts = key.split(".")

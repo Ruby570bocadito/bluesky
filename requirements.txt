@@ -29,7 +29,7 @@ flask>=3.0.0
 
 # ─── Bluetooth (obligatorio para funcionalidad real) ────────────────────────
 bleak>=0.14.0          # BLE cross-platform
-scapy>=2.4.5           # Packet crafting (KNOB, BLUFFS, BTLEJack, SweynTooth)
+scapy>=2.4.5           # Packet crafting (KNOB, BLUFFS, BTLEJack, SweynTooth, Crackle)
 cryptography>=3.4.0    # Criptografía BLE (Crackle, cifrados)
 
 # ─── Testing ──────────────────────────────────────────────────────────────
