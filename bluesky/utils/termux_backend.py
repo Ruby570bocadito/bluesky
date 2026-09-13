@@ -38,6 +38,22 @@ from .platform import check_bleak, check_command
 log = logging.getLogger("bluesky.termux")
 
 
+# ─── Validación de MAC ──────────────────────────────────────────────────────
+
+# MAC Bluetooth: XX:XX:XX:XX:XX:XX o XX-XX-XX-XX-XX-XX (hex).
+# Validar antes de pasar a subprocess evita que un caller poco cuidadoso
+# (p.ej. un plugin hostil o input de usuario sin sanitizar) introduzca
+# argumentos extra en la línea de comandos de termux-bluetooth-*.
+_MAC_RE = re.compile(
+    r"^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$"
+)
+
+
+def _is_valid_mac(address: str) -> bool:
+    """Valida que una dirección tenga formato MAC Bluetooth."""
+    return isinstance(address, str) and bool(_MAC_RE.match(address))
+
+
 # ─── Verificaciones ──────────────────────────────────────────────────────────
 
 
@@ -295,6 +311,9 @@ def get_device_info(address: str) -> Optional[Dict]:
     Returns:
         Dict con info del dispositivo o None
     """
+    if not _is_valid_mac(address):
+        log.warning("MAC inválida en get_device_info: %r", address)
+        return None
     if not is_termux_api_available():
         return None
 
@@ -363,6 +382,9 @@ def pair_device(address: str) -> bool:
     Returns:
         True si el emparejamiento fue exitoso
     """
+    if not _is_valid_mac(address):
+        log.warning("MAC inválida en pair_device: %r", address)
+        return False
     raw = _run_termux_api("pair", address, timeout=20)
     return raw is not None
 
@@ -377,6 +399,9 @@ def unpair_device(address: str) -> bool:
     Returns:
         True si se desemparejó correctamente
     """
+    if not _is_valid_mac(address):
+        log.warning("MAC inválida en unpair_device: %r", address)
+        return False
     raw = _run_termux_api("unpair", address, timeout=10)
     return raw is not None
 
@@ -391,6 +416,9 @@ def connect_device(address: str) -> bool:
     Returns:
         True si la conexión fue exitosa
     """
+    if not _is_valid_mac(address):
+        log.warning("MAC inválida en connect_device: %r", address)
+        return False
     raw = _run_termux_api("connect", address, timeout=20)
     return raw is not None
 
@@ -405,6 +433,9 @@ def disconnect_device(address: str) -> bool:
     Returns:
         True si se desconectó correctamente
     """
+    if not _is_valid_mac(address):
+        log.warning("MAC inválida en disconnect_device: %r", address)
+        return False
     raw = _run_termux_api("disconnect", address, timeout=10)
     return raw is not None
 

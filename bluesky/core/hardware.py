@@ -505,17 +505,33 @@ def _check_usb_vendor_linux(vendor_ids: List[str]) -> bool:
 
 
 def _check_usb_vendor_windows(vendor_ids: List[str]) -> bool:
-    """Verifica vendor ID en Windows via PowerShell."""
+    """Verifica vendor ID en Windows via PowerShell.
+
+    Args:
+        vendor_ids: Lista de vendor IDs en formato hex (sin '0x'), p.ej.
+                    ['0a12', '0a5c']. Solo se aceptan caracteres hex
+                    (defensa contra inyección PowerShell).
+    """
+    # Whitelist estricto: solo hex. Esto evita inyección PowerShell vía
+    # vendor_ids manipulados (p.ej. "0a12';Add-Type ...").
+    safe_ids = [vid for vid in vendor_ids
+                if isinstance(vid, str)
+                and re.fullmatch(r"[0-9A-Fa-f]+", vid) is not None]
+    if not safe_ids:
+        return False
     try:
         # Convertir vendor IDs a formato Windows (ej: 0a12 -> USB\VID_0A12)
-        patterns = [f"VID_{vid.upper()}" for vid in vendor_ids]
-        ps_script = f"""
-        $devices = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object {{
-            $_.InstanceId -match '{"|".join(patterns)}'
-        }}
-        if ($devices) {{ return 'FOUND' }}
-        return 'NOT_FOUND'
-        """
+        patterns = [f"VID_{vid.upper()}" for vid in safe_ids]
+        # Unir con '|' (regex OR). patterns ya está saneado → no inyectable.
+        # Comillas dobles dentro del script: usar here-string @" ... "@ para
+        # evitar problemas con caracteres especiales.
+        ps_script = """
+$devices = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object {
+    $_.InstanceId -match '__PATTERNS__'
+}
+if ($devices) { return 'FOUND' }
+return 'NOT_FOUND'
+""".replace("__PATTERNS__", "|".join(patterns))
         result = subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
             capture_output=True, text=True, timeout=10
@@ -556,14 +572,29 @@ def _check_usb_product_linux(product_name: str) -> bool:
 
 
 def _check_usb_product_windows(product_name: str) -> bool:
-    """Verifica producto en Windows via PowerShell."""
+    """Verifica producto en Windows via PowerShell.
+
+    Args:
+        product_name: Nombre de producto a buscar en FriendlyName. Se aplica
+                      un whitelist estricto (solo alfanuméricos y algunos
+                      separadores) para evitar inyección PowerShell.
+    """
+    # Whitelist estricto: alfanuméricos, guion, guion bajo. Esto evita que
+    # un product_name manipulado pueda inyectar PowerShell arbitrario.
+    if not isinstance(product_name, str) or not product_name:
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", product_name):
+        # Rechazar en lugar de sanitizar: devolver False es seguro
+        # (el caller cae en "no disponible", no en error).
+        return False
     try:
-        ps_script = f"""
-        $devices = Get-PnpDevice -ErrorAction SilentlyContinue |
-                    Where-Object {{ $_.FriendlyName -match '{product_name}' }}
-        if ($devices) {{ return 'FOUND' }}
-        return 'NOT_FOUND'
-        """
+        # product_name ya validado con whitelist → no inyectable.
+        ps_script = """
+$devices = Get-PnpDevice -ErrorAction SilentlyContinue |
+            Where-Object { $_.FriendlyName -match '__PRODUCT__' }
+if ($devices) { return 'FOUND' }
+return 'NOT_FOUND'
+""".replace("__PRODUCT__", product_name)
         result = subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
             capture_output=True, text=True, timeout=10

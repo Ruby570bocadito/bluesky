@@ -139,6 +139,47 @@ def _register_routes(app):
 
     # ─── HELPERS ────────────────────────────────────────────────────────────
 
+    def _is_safe_origin() -> bool:
+        """Comprueba si una petición POST/PUT/DELETE viene del mismo origen.
+
+        Defensa contra CSRF basada en Origin/Referer (Synchronizer Token
+        Pattern no requeriría estado en el servidor; esta validación es
+        suficiente porque la app web no maneja sesiones autenticadas y
+        se sirve desde el propio host).
+
+        Reglas:
+          - Si NO hay ni Origin ni Referer (p.ej. curl, scripts), se permite
+            (es el caso de uso legítimo para integración programática).
+          - Si hay Origin o Referer, su host DEBE coincidir con el Host de la
+            petición actual. Esto bloquea peticiones cross-origin desde
+            webs maliciosas que intenten alcanzar el localhost del usuario.
+
+        Retorna True si la petición es segura, False si debe rechazarse.
+        """
+        from urllib.parse import urlparse
+        target_host = request.host.lower()
+        # Origin tiene preferencia; si no, Referer
+        for header_name in ("Origin", "Referer"):
+            header_val = request.headers.get(header_name)
+            if not header_val:
+                continue
+            try:
+                parsed = urlparse(header_val)
+            except (ValueError, TypeError):
+                return False
+            origin_host = (parsed.netloc or "").lower()
+            if not origin_host:
+                # Header presente pero sin host parseable → bloquear
+                return False
+            # Mismo host (incluyendo puerto)
+            if origin_host != target_host:
+                return False
+            # Si llegamos aquí con al menos un header válido y coincidente,
+            # la petición es segura.
+            return True
+        # Sin Origin ni Referer → es curl/scripts (caso legítimo). Permitir.
+        return True
+
     def add_log(level: str, message: str):
         """Añade entrada al log web (thread-safe)."""
         entry = {
@@ -229,6 +270,20 @@ def _register_routes(app):
             if ttype in counts:
                 counts[ttype] += 1
         return counts
+
+    # ─── CSRF: validar Origin en mutaciones ──────────────────────────────
+    # Aplica a POST/PUT/DELETE/PATCH. GET y HEAD no están afectados.
+    @app.before_request
+    def _check_csrf_origin():
+        if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+            if not _is_safe_origin():
+                add_log("warning",
+                        f"CSRF bloqueado: {request.method} {request.path} "
+                        f"origin={request.headers.get('Origin') or '-'}")
+                return jsonify({
+                    "error": "Petición bloqueada por política CSRF",
+                    "hint": "El header Origin/Referer no coincide con el host destino",
+                }), 403
 
     # ─── RUTAS PRINCIPALES ──────────────────────────────────────────────────
 
@@ -591,16 +646,57 @@ def _register_routes(app):
 
     @app.route("/api/config")
     def api_config():
-        """Configuración actual."""
+        """Configuración actual (filtrada).
+
+        Antes este endpoint exponía toda la configuración incluyendo:
+          - default_target.address (MAC del target por defecto del usuario)
+          - favorites (lista de MACs guardadas por el usuario)
+          - module_options (posiblemente con MACs en overrides)
+          - session.last_session (nombre del último archivo de sesión)
+
+        Eso suponía una fuga de información significativa si la app se
+        exponía (por accidente o para acceso desde móvil). Ahora se
+        devuelve una versión sanitada: solo claves de UI relevantes y
+        contadores en lugar de listas completas.
+        """
         config_data = {}
         if app.state.get("config"):
             try:
-                config_data = app.state["config"].get_all()
+                full = app.state["config"].get_all()
             except Exception:
-                pass
+                full = {}
+            # Filtrar a solo lo seguro para mostrar en el dashboard.
+            # No exponer MACs ni favoritos ni paths de sesión.
+            general = full.get("general", {}) if isinstance(full, dict) else {}
+            if not isinstance(general, dict):
+                general = {}
+            config_data = {
+                "general": {
+                    "theme": general.get("theme", "auto"),
+                    "log_level": general.get("log_level", "info"),
+                    "report_format": general.get("report_format", "html"),
+                    "safe_mode": general.get("safe_mode", True),
+                    "language": general.get("language", "es"),
+                },
+                # Contadores en lugar de listas completas
+                "favorites_count": len(full.get("favorites", []))
+                                    if isinstance(full.get("favorites"), list)
+                                    else 0,
+                "module_options_count": len(full.get("module_options", {}))
+                                         if isinstance(full.get("module_options"), dict)
+                                         else 0,
+                # NO incluir default_target.address, favorites, module_options
+                # ni session.last_session (path del archivo en disco).
+            }
+        # Filtrar platform_info: la MAC del adaptador local es sensible
+        # (la usa la app para mostrarla en el dashboard, pero no debería
+        # exponerse vía API sin necesidad).
+        platform_info = dict(app.state.get("platform_info") or {})
+        platform_info.pop("backends", None)  # lista de backends → no expone MAC
+
         return jsonify({
             "config": config_data,
-            "platform": app.state.get("platform_info", {}),
+            "platform": platform_info,
         })
 
     # ─── ERROR HANDLERS ────────────────────────────────────────────────────

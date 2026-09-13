@@ -3,6 +3,7 @@ ModuleEngine - Carga y gestión dinámica de módulos de ataque/escaneo.
 """
 
 import os
+import re
 import inspect
 import importlib
 from pathlib import Path
@@ -10,6 +11,21 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Type
 
 if TYPE_CHECKING:
     from bluesky.core.plugin_loader import PluginLoader
+
+
+# MAC Bluetooth: XX:XX:XX:XX:XX:XX o XX-XX-XX-XX-XX-XX (hex).
+# Validar antes de pasar a subprocess evita que un caller poco cuidadoso
+# introduzca argumentos extra en la línea de comandos de hcitool/sdptool/
+# bluetoothctl/termux-bluetooth-* (defensa en profundidad aunque el argv
+# separado ya evita shell injection).
+_MAC_RE = re.compile(
+    r"^[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){5}$"
+)
+
+
+def is_valid_mac(address: str) -> bool:
+    """Valida que una dirección tenga formato MAC Bluetooth."""
+    return isinstance(address, str) and bool(_MAC_RE.match(address))
 
 
 class BaseModule:
@@ -50,7 +66,25 @@ class BaseModule:
             # Si tiene opción TARGET pero no se pasó target directamente,
             # verificar si está en options
             if not self.options or not self.options.get("TARGET", ""):
-                return False, "Se requiere un target (MAC address). Usa set TARGET <MAC> o pasa el target al ejecutar."
+                # Algunos módulos definen TARGET como opcional (p.ej.
+                # crackle lo usa "para filtrado"). Si el módulo marca la
+                # opción con descripción que contiene 'opcional', no la
+                # exijamos. Esto es heurístico pero respeta la semántica
+                # existente sin romper tests.
+                target_desc = str(self.module_options.get("TARGET", ""))
+                if "opcional" not in target_desc.lower():
+                    return False, "Se requiere un target (MAC address). Usa set TARGET <MAC> o pasa el target al ejecutar."
+
+        # Validar formato de MAC si se proporcionó target (defensa en
+        # profundidad: aunque subprocess.run con argv separado evita shell
+        # injection, un target mal formado podría ser pasado como flag
+        # adicional a herramientas CLI y causar comportamiento inesperado).
+        target_value = self.target or (self.options.get("TARGET", "") if self.options else "")
+        if target_value and not is_valid_mac(target_value):
+            return False, (
+                f"Target '{target_value}' no tiene formato MAC válido "
+                "(XX:XX:XX:XX:XX:XX)."
+            )
 
         # Verificar root
         if self.requires_root:
