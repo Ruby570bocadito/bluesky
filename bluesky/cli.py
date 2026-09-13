@@ -1239,6 +1239,10 @@ def cmd_web(args: list):
     p.add_argument("--debug", action="store_true", help="modo debug de Flask")
     p.add_argument("-o", "--open", dest="open_browser", action="store_true",
                    help="abrir el navegador al arrancar")
+    p.add_argument("--token", default=None, metavar="TOKEN",
+                   help="token de autenticación (recomendado si --host no es "
+                        "127.0.0.1). Las peticiones deben incluir header "
+                        "'Authorization: Bearer <TOKEN>' o query '?token=<TOKEN>'")
     ns = p.parse_args(args)
 
     if not 1 <= ns.port <= 65535:
@@ -1251,6 +1255,7 @@ def cmd_web(args: list):
             host=ns.host,
             debug=ns.debug,
             open_browser=ns.open_browser,
+            auth_token=ns.token,
         )
         return 0
     except ImportError as e:

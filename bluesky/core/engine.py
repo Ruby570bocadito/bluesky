@@ -78,11 +78,16 @@ class BaseModule:
         # injection, un target mal formado podría ser pasado como flag
         # adicional a herramientas CLI y causar comportamiento inesperado).
         target_value = self.target or (self.options.get("TARGET", "") if self.options else "")
-        if target_value and not is_valid_mac(target_value):
-            return False, (
-                f"Target '{target_value}' no tiene formato MAC válido "
-                "(XX:XX:XX:XX:XX:XX)."
-            )
+        if target_value:
+            # Targets especiales wildcard admitidos por algunos módulos
+            # (p. ej. btspam admite 'all', '*', 'broadcast'). No son MAC
+            # pero son valores legítimos.
+            _wildcards = {"all", "*", "broadcast"}
+            if str(target_value).lower() not in _wildcards and not is_valid_mac(target_value):
+                return False, (
+                    f"Target '{target_value}' no tiene formato MAC válido "
+                    "(XX:XX:XX:XX:XX:XX)."
+                )
 
         # Verificar root
         if self.requires_root:

@@ -47,13 +47,19 @@ MAX_SCAN_RESULTS = 200
 
 # ─── Crear aplicación Flask ─────────────────────────────────────────────────
 
-def create_app(engine=None, debug: bool = False) -> "Flask":
+def create_app(engine=None, debug: bool = False, auth_token: str = None) -> "Flask":
     """
     Crea y configura la aplicación Flask.
 
     Args:
         engine: Instancia de ModuleEngine (opcional)
         debug: Modo debug
+        auth_token: Token de autenticación opcional. Si se proporciona,
+            TODAS las peticiones deben incluirlo (header
+            ``Authorization: Bearer <token>`` o query ``?token=<token>``).
+            Recomendado cuando la app se expone con ``--host 0.0.0.0``:
+            sin auth, cualquiera en la red puede lanzar escaneos/ataques
+            vía API. Con auth, solo quien conoce el token puede operar.
 
     Returns:
         Flask app configurada
@@ -75,6 +81,9 @@ def create_app(engine=None, debug: bool = False) -> "Flask":
         "last_scan_time": None,
         "web_log": [],
         "lock": threading.Lock(),
+        # Token de autenticación (None = sin auth). Se compara con
+        # hmac.compare_digest para evitar timing attacks.
+        "auth_token": auth_token,
     }
 
     # ─── Importar módulos de bluesky ────────────────────────────────────────
@@ -279,6 +288,44 @@ def _register_routes(app):
             if ttype in counts:
                 counts[ttype] += 1
         return counts
+
+    # ─── Autenticación por token (opcional) ───────────────────────────────
+    # Si app.state['auth_token'] está configurado, TODAS las peticiones
+    # deben incluir el token. Mitiga el riesgo de exponer el dashboard
+    # con `--host 0.0.0.0`: sin auth, cualquiera en la red puede lanzar
+    # escaneos/ataques vía API.
+    @app.before_request
+    def _check_auth_token():
+        expected = app.state.get("auth_token")
+        if not expected:
+            return None  # Auth desactivada → permitir
+        # Token proporcionado en header Authorization: Bearer <token>
+        auth_header = request.headers.get("Authorization", "")
+        provided = ""
+        if auth_header.startswith("Bearer "):
+            provided = auth_header[7:]
+        else:
+            # Fallback: query param ?token=<token> (para URLs de navegador)
+            provided = request.args.get("token", "")
+        # Comparación constant-time para evitar timing attacks
+        import hmac
+        if not hmac.compare_digest(str(provided), str(expected)):
+            add_log("warning",
+                    f"Auth rechazada: {request.method} {request.path} "
+                    f"ip={request.remote_addr}")
+            # Para peticiones de API (JSON), devolver 401 JSON
+            if request.path.startswith("/api/"):
+                return jsonify({
+                    "error": "No autorizado",
+                    "hint": "Proporciona el token vía header "
+                            "'Authorization: Bearer <token>' o query "
+                            "'?token=<token>'",
+                }), 401
+            # Para páginas HTML, devolver 401 con mensaje simple
+            return ("No autorizado. Proporciona el token vía "
+                    "?token=<token> en la URL.", 401, {
+                        "Content-Type": "text/plain; charset=utf-8"
+                    })
 
     # ─── CSRF: validar Origin en mutaciones ──────────────────────────────
     # Aplica a POST/PUT/DELETE/PATCH. GET y HEAD no están afectados.
@@ -797,7 +844,7 @@ def _register_routes(app):
 # ─── CLI Handler ────────────────────────────────────────────────────────────
 
 def run_web_server(port: int = 5000, host: str = "127.0.0.1", debug: bool = False,
-                   open_browser: bool = False):
+                   open_browser: bool = False, auth_token: str = None):
     """
     Inicia el servidor web de bluesky.
 
@@ -806,13 +853,25 @@ def run_web_server(port: int = 5000, host: str = "127.0.0.1", debug: bool = Fals
         host: Host (default: 127.0.0.1)
         debug: Modo debug
         open_browser: Abrir navegador automáticamente
+        auth_token: Token de autenticación opcional. Si se proporciona,
+            TODAS las peticiones deben incluirlo (header
+            ``Authorization: Bearer <token>`` o query ``?token=<token>``).
+            Recomendado cuando host != 127.0.0.1.
     """
     if Flask is None:
         print("  ❌ Flask no está instalado.")
         print("  Instala: pip install flask")
         return
 
-    app = create_app(debug=debug)
+    # Si host no es localhost y no se proporciona token, mostrar warning
+    # de seguridad (cualquiera en la red puede operar el dashboard).
+    if host not in ("127.0.0.1", "localhost", "::1") and not auth_token:
+        print("  ⚠️  ADVERTENCIA: exponiendo el dashboard sin autenticación.")
+        print(f"      Cualquiera en la red {host} puede lanzar escaneos/ataques vía API.")
+        print("      Usa --token <TOKEN> para requerir autenticación.")
+        print()
+
+    app = create_app(debug=debug, auth_token=auth_token)
 
     reports_dir = Path("reports")
     reports_dir.mkdir(exist_ok=True)
@@ -825,6 +884,7 @@ def run_web_server(port: int = 5000, host: str = "127.0.0.1", debug: bool = Fals
         except Exception:
             pass
 
+    auth_status = "✅ habilitada" if auth_token else "❌ deshabilitada"
     print(f"""
   ╔══════════════════════════════════════════╗
   ║     🌐 bluesky Web Dashboard              ║
@@ -834,12 +894,18 @@ def run_web_server(port: int = 5000, host: str = "127.0.0.1", debug: bool = Fals
   📁 Reportes: {reports_dir.absolute()}
   🖥️  Plataforma: {app.state.get('platform_info', {}).get('os_name', '?')}
   📦 Módulos: {modules_count}
+  🔒 Auth: {auth_status}
 
   Presiona Ctrl+C para detener
     """)
 
     if open_browser:
-        webbrowser.open(url)
+        # Si hay token, incluirlo en la URL que se abre en el navegador
+        # para que el primer GET no devuelva 401.
+        open_url = url
+        if auth_token:
+            open_url = f"{url}/?token={auth_token}"
+        webbrowser.open(open_url)
 
     try:
         app.run(host=host, port=port, debug=debug, use_reloader=False)

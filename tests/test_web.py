@@ -419,6 +419,7 @@ class TestWebCLICommand:
             host="127.0.0.1",
             debug=False,
             open_browser=False,
+            auth_token=None,
         )
 
     @patch("bluesky.web.app.run_web_server")
@@ -431,6 +432,7 @@ class TestWebCLICommand:
             host="127.0.0.1",
             debug=False,
             open_browser=False,
+            auth_token=None,
         )
 
     @patch("bluesky.web.app.run_web_server")
@@ -443,6 +445,7 @@ class TestWebCLICommand:
             host="0.0.0.0",
             debug=False,
             open_browser=False,
+            auth_token=None,
         )
 
     @patch("bluesky.web.app.run_web_server")
@@ -455,6 +458,7 @@ class TestWebCLICommand:
             host="127.0.0.1",
             debug=True,
             open_browser=False,
+            auth_token=None,
         )
 
     @patch("bluesky.web.app.run_web_server")
@@ -467,6 +471,7 @@ class TestWebCLICommand:
             host="127.0.0.1",
             debug=False,
             open_browser=True,
+            auth_token=None,
         )
 
     @patch("bluesky.web.app.run_web_server")
@@ -479,6 +484,7 @@ class TestWebCLICommand:
             host="0.0.0.0",
             debug=True,
             open_browser=True,
+            auth_token=None,
         )
 
     def test_cmd_web_no_flask(self):
@@ -490,3 +496,16 @@ class TestWebCLICommand:
                 cmd_web([])
             except Exception:
                 pytest.fail("cmd_web no debe lanzar excepción con ImportError")
+
+    @patch("bluesky.web.app.run_web_server")
+    def test_cmd_web_with_token(self, mock_run):
+        """web() con --token -> auth_token se propaga a run_web_server."""
+        from bluesky.cli import cmd_web
+        cmd_web(["--token", "my-secret"])
+        mock_run.assert_called_once_with(
+            port=5000,
+            host="127.0.0.1",
+            debug=False,
+            open_browser=False,
+            auth_token="my-secret",
+        )

