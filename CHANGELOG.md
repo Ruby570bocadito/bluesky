@@ -26,6 +26,17 @@ y el versionado sigue [SemVer](https://semver.org/lang/es/).
 
 ### Cambiado
 
+- **README y assets renovados por completo:**
+  - Nuevo banner/logo profesional (emblema de escudo con runa Bluetooth,
+    wordmark con degradado y pills del framework) + icono de 512px.
+  - GIFs de demostración REALES grabados ejecutando la herramienta (capturas
+    ANSI de la v0.6.1 renderizadas a terminal con Chromium): sesión REPL
+    completa (search → use → show options → back → exit) y montaje de CLI
+    (list → info). Sin caracteres rotos, con emojis e iconos renderizados.
+  - Capturas nuevas de la CLI (list, info, educate) y del dashboard web en
+    vivo (dashboard, módulos, detalle de módulo, escaneo, reportes, acerca).
+  - README más compacto: tabla de módulos colapsable, imágenes con tamaño
+    controlado, eliminado el vídeo obsoleto (v0.6.0) y las capturas sin uso.
 - **Consola y CLI más profesionales (estilo msfconsole):**
   - Banner ASCII (logo compartido `ASCII_LOGO` en `utils/format.py`, fuente
     única para CLI y consola) con versión, nº de módulos y aviso de uso

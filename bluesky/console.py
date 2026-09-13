@@ -378,9 +378,9 @@ class BlueskyConsole(cmd.Cmd):
             table = Table(title=f"Módulos disponibles ({len(modules)} en total)", border_style="cyan")
             table.add_column("", style="bold", width=2)
             table.add_column("Nombre", style="cyan", width=16)
-            table.add_column("Tipo", width=6)
+            table.add_column("Tipo", width=5)
             table.add_column("Descripción", style="white")
-            table.add_column("CVE", style="dim")
+            table.add_column("CVE", style="dim", width=20)
 
             for severity in ["critical", "high", "medium", "low"]:
                 for m in by_sev.get(severity, []):
@@ -428,16 +428,16 @@ class BlueskyConsole(cmd.Cmd):
             table = Table(title=f"Resultados de búsqueda: '{arg}' ({len(results)} coincidencias)", border_style="cyan")
             table.add_column("", width=2)
             table.add_column("Nombre", style="cyan", width=16)
-            table.add_column("Tipo", width=6)
-            table.add_column("Descripción", width=50)
+            table.add_column("Tipo", width=5)
+            table.add_column("Descripción")
             table.add_column("CVE", style="dim", width=20)
             for m in results:
                 table.add_row(
                     severity_icon(m.get("severity", "")),
                     m.get("name", ""),
                     target_type_icon(m.get("target_type", "")),
-                    m.get("description", "")[:48],
-                    m.get("cve", "")[:18]
+                    m.get("description", ""),
+                    m.get("cve", "")[:20]
                 )
             self.console.print(table)
         else:
