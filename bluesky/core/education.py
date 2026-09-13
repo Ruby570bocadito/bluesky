@@ -699,24 +699,29 @@ EDU_DB: Dict[str, Dict] = {
         ],
         "references": [],
     },
-    "demo_scanner": {
-        "title": "Demo Scanner — ejemplo de plugin externo",
+    "oui_lookup": {
+        "title": "OUI Lookup — ejemplo de plugin externo (funcionalidad real)",
         "what": (
-            "Plugin de demostración del sistema de extensión: muestra cómo "
-            "un módulo externo (directorio plugins/ o entry point de pip) "
-            "se integra con el mismo contrato que los módulos nativos "
-            "(BaseModule + shape de resultado {success, data, error})."
+            "Plugin de ejemplo del sistema de extensión: consulta el "
+            "fabricante (OUI) de una dirección MAC usando la base offline "
+            "compartida de bluesky. Muestra cómo un módulo externo "
+            "(directorio plugins/ o entry point de pip) se integra con el "
+            "mismo contrato que los módulos nativos (BaseModule + shape "
+            "de resultado {success, data, error})."
         ),
         "how": [
             "1. bluesky descubre el plugin en plugins/ (PLUGIN_INFO) o via "
             "entry points 'bluesky.modules'.",
             "2. Valida la interfaz (run/get_info) y lo registra junto a los "
             "nativos sin sobrescribirlos.",
-            "3. 'run' del plugin se ejecuta igual que un módulo nativo.",
+            "3. 'run' del plugin se ejecuta igual que un módulo nativo: "
+            "bluesky attack oui_lookup B8:27:EB:12:34:56 → Raspberry Pi "
+            "Trading.",
         ],
         "impact": (
-            "Ninguno: es un ejemplo didáctico de integración. Útil como "
-            "plantilla para desarrollar plugins propios de auditoría."
+            "Ninguno: es una consulta offline de una base pública de "
+            "prefijos MAC. Útil como plantilla para desarrollar plugins "
+            "propios de auditoría."
         ),
         "mitigation": [
             "Solo cargar plugins de fuentes de confianza: se ejecutan con "

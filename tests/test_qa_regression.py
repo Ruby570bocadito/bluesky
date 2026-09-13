@@ -139,19 +139,15 @@ class TestDeviceScannerWindows(unittest.TestCase):
         }])
 
 
-class TestTermuxUtils(unittest.TestCase):
-    """utils/termux.py: degradación sin termux-bluetooth."""
+class TestTermuxPlatformUtils(unittest.TestCase):
+    """utils/platform.py: detección unificada (termux.py legado eliminado)."""
 
-    def test_07_termux_devices_without_binary(self):
-        """Sin termux-bluetooth debe devolver [] (antes: UnboundLocalError json)."""
-        from bluesky.utils.termux import get_termux_bluetooth_devices
+    def test_07_is_termux_unified_detection(self):
+        """La detección unificada de plataforma funciona sin crash."""
+        from bluesky.utils.platform import is_termux, get_platform
 
-        def run_boom(*a, **k):
-            raise FileNotFoundError("termux-bluetooth")
-
-        with mock.patch("subprocess.run", run_boom):
-            devices = get_termux_bluetooth_devices()
-        self.assertEqual(devices, [])
+        self.assertIsInstance(is_termux(), bool)
+        self.assertIn(get_platform(), ("linux", "termux", "windows"))
 
 
 class TestReporterShapes(unittest.TestCase):
@@ -245,24 +241,29 @@ class TestModuleDataShapes(unittest.TestCase):
     """result["data"] de los módulos debe ser JSON-serializable."""
 
     def test_14_btlejack_sniff_data_serializable(self):
-        """btlejack sniff: data['packets'] son hex strings, no objetos scapy."""
+        """btlejack sniff: data del resultado es JSON-serializable."""
         import tempfile
         from bluesky.modules.attacks import btlejack as bj_mod
 
         out_dir = Path(tempfile.mkdtemp(prefix="bs_qa_btlejack_"))
-        m = bj_mod.BTLEJack(options={"MODE": "sniff", "OUTPUT": str(out_dir)})
-        with mock.patch.object(bj_mod, "SCAPY_AVAILABLE", True):
+        m = bj_mod.BTLEJack(options={
+            "MODE": "sniff", "ACCESS_ADDRESS": "8E89BED6",
+            "OUTPUT": str(out_dir)})
+
+        # Simular (solo en test) la presencia y salida de la herramienta real
+        with mock.patch.object(
+                bj_mod.BTLEJack, "_btlejack_available", return_value=True), \
+             mock.patch.object(
+                m, "_run_tool",
+                return_value={"returncode": 0, "stdout": "sniffed 12 packets\n", "stderr": ""}):
             res = m.run()
         try:
             self.assertTrue(res["success"])
-            # Antes: TypeError Object of type Raw is not JSON serializable
+            # data debe ser serializable (salida de herramienta = strings)
             json.dumps(res["data"])
-            for pkt in res["data"]["packets"]:
-                self.assertIsInstance(pkt, str)
-            # Los objetos scapy quedan en el estado interno para wrpcap
-            self.assertGreater(len(m._captured_packets), 0)
+            self.assertIn("capture_file", res["data"])
         finally:
-            for f in ("btlejack_capture.pcap", "btlejack_capture.json"):
+            for f in ("btlejack_sniff.txt",):
                 p = out_dir / f
                 if p.exists():
                     p.unlink()

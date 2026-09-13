@@ -37,7 +37,7 @@ Version: 0.5.0
 License: MIT
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __author__ = "Ruby570bocadito"
 __description__ = "Bluetooth Security Auditing Framework - Metasploit-style"
 

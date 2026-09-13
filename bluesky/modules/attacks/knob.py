@@ -316,19 +316,18 @@ class Knob(BaseModule):
             "forced_key_size": self._force_key_size,
             "hardware_available": False,
             "pairing_detected": False,
-            "attack_result": "simulated",
             "stages": [],
         })
 
         # Etapa 1: Verificar hardware
         if not self._check_hardware_capability():
-            return self._simulate_attack(mac)
+            return self._hardware_unavailable(mac)
 
         self.result["data"]["hardware_available"] = True
 
         # Etapa 2: Abrir HCI socket
         if not self._open_hci_socket():
-            return self._simulate_attack(mac, reason="HCI socket falló")
+            return self._hardware_unavailable(mac, reason="HCI socket falló")
 
         self.result["data"]["stages"].append({"stage": 1, "name": "HCI socket abierto", "success": True})
 
@@ -385,53 +384,53 @@ class Knob(BaseModule):
         return self.result
 
     def _no_scapy_result(self, mac: str) -> dict:
-        """Resultado cuando scapy no está instalado."""
+        """Resultado honesto cuando scapy no está instalado."""
         self.result["data"]["message"] = (
-            "⚠️  KNOB activo requiere scapy.\n"
+            "❌ KNOB activo requiere scapy (no instalado).\n"
             "   Instala: pip install scapy\n"
-            "   O usa detección pasiva sin EXECUTE=True"
+            "   Alternativa: verificación pasiva sin EXECUTE=True"
         )
         self.result["data"]["attack_result"] = "unavailable"
-        self.result["success"] = True
+        self.result["data"]["requires"] = ["scapy (pip install scapy)"]
+        self.result["success"] = False
+        self.result["error"] = "KNOB activo no disponible: falta scapy"
         return self.result
 
-    def _simulate_attack(self, mac: str, reason: str = "") -> dict:
-        """Simula el ataque cuando no hay hardware real disponible."""
-        log.info(f"Simulando ataque KNOB contra {mac}: {reason}")
+    def _hardware_unavailable(self, mac: str, reason: str = "") -> dict:
+        """Resultado honesto cuando el hardware real no está disponible.
+
+        El ataque NO se ejecuta y NO se fabrican datos: se reporta la
+        causa real y qué se necesita para el ataque real.
+        """
+        log.warning(f"KNOB no ejecutable contra {mac}: {reason}")
 
         self.result["data"].update({
             "hardware_available": False,
-            "attack_result": "simulated",
-            "simulation": True,
+            "attack_result": "unavailable",
             "stages": [
                 {
                     "stage": 1,
                     "name": "Verificación de hardware",
                     "success": False,
-                    "detail": f"Hardware no disponible: {reason or 'sin dongle CSR'}",
-                },
-                {
-                    "stage": 2,
-                    "name": "Apertura de socket HCI",
-                    "success": False,
-                    "detail": "Simulado - no ejecutado",
+                    "detail": f"Hardware no disponible: {reason or 'sin dongle compatible'}",
                 },
             ],
             "message": (
-                f"🔬 KNOB - MODO SIMULACIÓN\n\n"
-                f"   Target: {mac}\n"
-                f"   Forzar clave a: {self._force_key_size} byte(s)\n\n"
-                f"   {'⚠️  ' + reason if reason else '⚠️  Hardware requerido no disponible'}\n\n"
+                f"❌ KNOB activo no se pudo ejecutar contra {mac}.\n"
+                f"   Causa: {reason or 'hardware requerido no disponible'}\n\n"
                 f"   Para ataque real necesitas:\n"
                 f"   1. Un dongle CSR 4.0+ o TP-Link UB500 con DarkFirmware\n"
                 f"   2. scapy instalado (pip install scapy)\n"
                 f"   3. Ejecutar con root (sudo)\n"
                 f"   4. El target debe estar haciendo pairing durante el ataque\n\n"
+                f"   Alternativa: verificación pasiva con 'bluesky attack knob {mac}'\n"
+                f"   (sin EXECUTE) que usa sdptool/hcitool reales.\n\n"
                 f"   Referencia: https://knobattack.com/\n"
                 f"   PoC: https://github.com/francozappa/knob"
             ),
         })
-        self.result["success"] = True
+        self.result["success"] = False
+        self.result["error"] = f"KNOB activo no disponible: {reason or 'sin hardware compatible'}"
         return self.result
 
     # ─── Operaciones HCI ─────────────────────────────────────────────────────

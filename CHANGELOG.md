@@ -4,6 +4,81 @@ Todos los cambios notables de este proyecto se documentan en este archivo.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el versionado sigue [SemVer](https://semver.org/lang/es/).
 
+## [0.6.0] - 2026-09-13
+
+### Cambiado — "código real, cero simulación"
+
+- **Eliminado TODO el código simulado del framework.** Los 5 módulos con
+  rutas de simulación (knob, bluffs, btlejack, bluefrag, crackle) ahora
+  hacen solo lo que el hardware y las herramientas permiten. Cuando algo
+  falta, devuelven `success=false` con `error` descriptivo y
+  `data.requires` (qué instalar, qué dongle, qué permisos) — nunca
+  fabrican dispositivos, RSSI, paquetes ni tasas de éxito.
+- **BTLEJack reescrito como delegador de herramientas reales**: scan
+  fusiona la salida real de `btlejack` (si está instalado) con las
+  conexiones reales del adaptador local (`hcitool con`); sniff/hijack/
+  mitm/inject construyen y ejecutan el comando real de la herramienta
+  upstream (github.com/virtualabs/btlejack) y reportan su salida y exit
+  code tal cual. Se eliminaron 12 usos de `random` y 3 métodos
+  `_simulate_*`.
+- **BlueFrag con envío real**: scan reutiliza `DeviceScanner` (BlueZ/
+  Bleak/Termux) y anota dispositivos reales con la heurística de
+  prefijos MAC Android (etiquetada como tal); exploit/dos envían el
+  payload construido por L2CAP real (PyBlueZ, canal de señalización,
+  siguiendo el método del PoC público) y el modo dos **verifica el
+  efecto real** reintenando la conexión antes y después del envío.
+- **Crackle con criptografía SMP real**: la derivación de claves usa
+  `s1()` = AES-128-ECB real (librería `cryptography`) en lugar del
+  stub SHA-256; TK=0 para Just Works y TK=ASCII(PIN) para Passkey
+  (según Ryan, WOOT'13). La LTK distribuida se recupera directamente
+  de `SM_Encryption_Information` de la captura. La captura en vivo es
+  un pipeline 100% real `hcidump -w → .pcap → análisis scapy`.
+- **knob/bluffs**: `_simulate_attack()` reemplazado por resultados
+  honestos de "hardware no disponible" (causa real + requisitos +
+  alternativa pasiva). `_no_scapy_result` ahora falla honestamente
+  (antes devolvía `success=true`).
+- `check_prerequisites` de crackle/btlejack/bluefrag es ahora no
+  bloqueante: cada modo reporta sus propias dependencias reales al
+  ejecutarse (corregidos 3 tests que fallaban sistemáticamente por
+  exigir scapy en entornos sin él).
+
+### Añadido
+
+- **Plugin de ejemplo funcional**: `plugins/oui_lookup.py` (consulta de
+  fabricante por MAC con la base OUI offline) sustituye a
+  `demo_scanner`, que devolvía dispositivos inventados. Entrada
+  educativa actualizada y tests de integración reales.
+- **Assets reales para la documentación**: portada (`banner.png`), GIF
+  de sesión CLI (`demo_cli.gif`), video de demostración CLI+web
+  (`demo_bluesky.mp4`, 33 s) y 16 capturas reales (6 de CLI renderizadas
+  desde pty + 10 del dashboard web con Playwright) — todas de salidas
+  reales de la aplicación, sin mockups.
+- **README rehecho**: nueva portada, sección Demo con video y GIF,
+  capturas reales en CLI/educación/web, tree actualizado, matiz
+  "sin humo" (contrato honesto) y enlace al análisis técnico.
+
+### Eliminado
+
+- `bluesky/utils/termux.py` (legado: sin uso en producción, duplicaba
+  `platform.py`; sus tests migrados a la API unificada).
+- `plugins/demo_scanner.py` (plugin simulado) → ver arriba.
+- `scripts/demo.sh` (script de demostración simulada).
+- `bluesky.spec` (no usado por `scripts/build_pyinstaller.sh`, que
+  genera y limpia su propio spec; su presencia hacía que el script
+  borrara un archivo versionado).
+- `docs/TESTING_WINDOWS.md` (obsoleto: cifras de v0.1, superado por
+  README + CI).
+- Capturas antiguas `docs/screenshot_*.png` (sustituidas por las
+  capturas reales de `docs/assets/`).
+
+### Tests
+
+- Suite: 406 passed (antes 349 + 3 que fallaban sistemáticamente por
+  dependencias; ahora el contrato honesto se testifica explícitamente:
+  fallo con `requires`/`error`, sin datos fabricados, STK real AES
+  determinista, LTK desde distribución, envío con verificación
+  antes/después).
+
 ## [0.5.0] - 2026-09-13
 
 ### Añadido

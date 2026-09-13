@@ -110,14 +110,14 @@ class TestModuleOptionParsing(unittest.TestCase):
         self.assertEqual(m._master_addr, LAB_MAC)
 
     def test_07_crackle_bad_max_pin(self):
-        """Crackle(MAX_PIN='') usa el default 999999 (antes ValueError)."""
+        """Crackle(CAPTURE_SECONDS='') usa el default (antes ValueError)."""
         from bluesky.modules.attacks.crackle import Crackle
 
-        m = Crackle(target=LAB_MAC, options={"MAX_PIN": ""})
-        self.assertEqual(m._max_pin, 999999)
+        m = Crackle(target=LAB_MAC, options={"CAPTURE_SECONDS": ""})
+        self.assertEqual(m._capture_seconds, 30)
 
-    def test_08_crackle_pin_non_numeric_message(self):
-        """_bruteforce_ltk con PIN no numérico retorna mensaje, no ValueError."""
+    def test_08b_crackle_recover_keys_bad_pin(self):
+        """_recover_keys con PIN no numérico retorna mensaje, no ValueError."""
         from bluesky.modules.attacks.crackle import Crackle
 
         m = Crackle(options={"PCAP_FILE": "x.pcap", "PIN": "not-a-pin"})
@@ -127,18 +127,22 @@ class TestModuleOptionParsing(unittest.TestCase):
             {"type": "confirm", "value": "c" * 32},
             {"type": "random", "value": "d" * 32},
         ]
-        res = m._bruteforce_ltk(packets)  # Antes: ValueError: invalid literal
+        res = m._recover_keys(packets)  # PIN inválido: mensaje honesto
         self.assertFalse(res["success"])
         self.assertIn("PIN inválido", res["message"])
 
-    def test_09_btlejack_hijack_bad_channel(self):
-        """_simulate_hijack con canal no numérico degrada a canal aleatorio."""
+    def test_09_btlejack_hijack_honest_without_tool(self):
+        """hijack sin herramienta btlejack: fallo honesto, sin datos falsos."""
         from bluesky.modules.attacks.btlejack import BTLEJack
 
-        m = BTLEJack(target=LAB_MAC, options={"MODE": "hijack", "CHANNEL": "0x25"})
-        sim = m._simulate_hijack()  # Antes: ValueError: invalid literal for int()
-        self.assertIsInstance(sim["channel"], int)
-        self.assertTrue(0 <= sim["channel"] <= 36)
+        m = BTLEJack(target=LAB_MAC, options={
+            "MODE": "hijack", "CHANNEL": "0x25", "OUTPUT": "/tmp/btlejack_qa"})
+        res = m.run()
+        if m._btlejack_available():
+            self.skipTest("btlejack instalado en este entorno")
+        self.assertFalse(res["success"])
+        self.assertIn("requires", res["data"])
+        self.assertIn("unavailable", str(res["data"].get("attack_result", "")))
 
     def test_10_btspam_method_none_and_bad_numbers(self):
         """btspam.run() con METHOD=None y números malformados no revienta."""
@@ -380,19 +384,21 @@ class TestWindowsBackendBool(unittest.TestCase):
 class TestScapyCompatAndContract(unittest.TestCase):
     """Compatibilidad scapy 2.7 y shape uniforme de run_module."""
 
-    def test_22_btlejack_scapy_available_with_scapy_27(self):
-        """Con scapy 2.7 instalado, btlejack detecta scapy (nombres *_IND)."""
+    def test_22_btlejack_imports_clean_with_scapy_27(self):
+        """btlejack importa limpio con scapy 2.7 (ya no usa capas LL_*)."""
         try:
-            import scapy
-            _scapy_probe = bool(scapy)  # sondeo de disponibilidad
+            import scapy  # noqa: F401
         except ImportError:
             self.skipTest("scapy no instalado en este entorno")
-        del _scapy_probe
+        # El módulo delega en la herramienta real btlejack: no importa
+        # capas LL_* de scapy (antes: ImportError con nombres renombrados
+        # en scapy >= 2.5 → degradación silenciosa).
         from bluesky.modules.attacks import btlejack
 
-        # Antes: ImportError por LL_DATA/LL_CONNECTION_UPDATE_REQ/LL_CHANNEL_MAP_REQ
-        # → SCAPY_AVAILABLE=False con scapy instalado (degradación silenciosa).
-        self.assertTrue(btlejack.SCAPY_AVAILABLE)
+        self.assertTrue(hasattr(btlejack, "BTLEJack"))
+        inst = btlejack.BTLEJack(options={"MODE": "scan"})
+        ok, _msg = inst.check_prerequisites()
+        self.assertTrue(ok)
 
     def test_23_run_module_result_shape_uniform(self):
         """Todos los resultados de run_module comparten success/data/error."""

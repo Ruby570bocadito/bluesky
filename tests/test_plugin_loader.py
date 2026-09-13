@@ -179,15 +179,29 @@ class TestPluginIntegration:
         # plugin_loader debe existir
         assert engine.plugin_loader is not None
 
-    def test_02_demo_plugin_in_list(self):
-        """El plugin demo aparece en list_modules si existe."""
+    def test_02_oui_lookup_plugin_in_list(self):
+        """El plugin oui_lookup aparece en list_modules si existe."""
         from bluesky.core.engine import ModuleEngine
         engine = ModuleEngine(load_plugins=True)
         names = [m.get("name") for m in engine.list_modules()]
-        # Si el plugin demo_scanner está en plugins/, debe aparecer
-        demo_path = Path(__file__).parent.parent / "plugins" / "demo_scanner.py"
-        if demo_path.exists():
-            assert "demo_scanner" in names
+        # Si el plugin oui_lookup está en plugins/, debe aparecer
+        plugin_path = Path(__file__).parent.parent / "plugins" / "oui_lookup.py"
+        if plugin_path.exists():
+            assert "oui_lookup" in names
+
+    def test_02b_oui_lookup_plugin_runs_real(self):
+        """El plugin oui_lookup devuelve datos reales de la base OUI."""
+        from bluesky.core.engine import ModuleEngine
+        engine = ModuleEngine(load_plugins=True)
+        cls = engine.get_module("oui_lookup")
+        if cls is None:
+            pytest.skip("plugin oui_lookup no disponible")
+        inst = cls()
+        result = inst.run(target="B8:27:EB:12:34:56")
+        assert result["success"] is True
+        assert "Raspberry Pi" in result["data"]["vendor"]
+        result_bad = inst.run(target="no-es-una-mac")
+        assert result_bad["success"] is False
 
     def test_03_plugin_type_conversion(self):
         """PluginLoader puede contar cargados vs descubiertos."""

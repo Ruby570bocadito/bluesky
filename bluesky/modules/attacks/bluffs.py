@@ -351,12 +351,12 @@ class Bluffs(BaseModule):
         })
 
         if not self._check_hardware():
-            return self._simulate_attack(mac)
+            return self._hardware_unavailable(mac)
 
         self.result["data"]["hardware_available"] = True
 
         if not self._open_hci_socket():
-            return self._simulate_attack(mac, reason="No se pudo abrir HCI socket")
+            return self._hardware_unavailable(mac, reason="No se pudo abrir HCI socket")
 
         self.result["data"]["stages"].append({"stage": 1, "name": "HCI socket abierto", "success": True})
 
@@ -423,44 +423,39 @@ class Bluffs(BaseModule):
         return self.result
 
     def _no_scapy_result(self, mac: str) -> dict:
+        """Resultado honesto cuando scapy no está instalado."""
         self.result["data"]["message"] = (
-            "⚠️  BLUFFS activo requiere scapy.\n"
+            "❌ BLUFFS activo requiere scapy (no instalado).\n"
             "   Instala: pip install scapy\n"
-            "   O usa detección pasiva sin EXECUTE=True"
+            "   Alternativa: detección pasiva sin EXECUTE=True"
         )
         self.result["data"]["attack_result"] = "unavailable"
-        self.result["success"] = True
+        self.result["data"]["requires"] = ["scapy (pip install scapy)"]
+        self.result["success"] = False
+        self.result["error"] = "BLUFFS activo no disponible: falta scapy"
         return self.result
 
-    def _simulate_attack(self, mac: str, reason: str = "") -> dict:
-        """Simula el ataque BLUFFS cuando no hay hardware real."""
-        log.info(f"Simulando ataque BLUFFS contra {mac}: {reason}")
+    def _hardware_unavailable(self, mac: str, reason: str = "") -> dict:
+        """Resultado honesto cuando el hardware real no está disponible.
+
+        El ataque NO se ejecuta y NO se fabrican datos: se reporta la
+        causa real y qué se necesita para el ataque real.
+        """
+        log.warning(f"BLUFFS no ejecutable contra {mac}: {reason}")
 
         self.result["data"].update({
             "hardware_available": False,
-            "attack_result": "simulated",
-            "simulation": True,
+            "attack_result": "unavailable",
             "stages": [
                 {
                     "stage": 1, "name": "Verificación de hardware",
                     "success": False,
                     "detail": f"Hardware no disponible: {reason or 'sin dongle compatible'}",
                 },
-                {
-                    "stage": 2, "name": "SDB manipulation (Classic)",
-                    "success": False, "detail": "Simulado",
-                },
-                {
-                    "stage": 3, "name": "LL manipulation (BLE)",
-                    "success": False, "detail": "Simulado",
-                },
             ],
             "message": (
-                f"🔬 BLUFFS - MODO SIMULACIÓN\n\n"
-                f"   Target: {mac}\n"
-                f"   Modo: {self._mode}\n"
-                f"   Forzar LK reuse: {self._force_lk_reuse}\n\n"
-                f"   {'⚠️  ' + reason if reason else '⚠️  Hardware requerido no disponible'}\n\n"
+                f"❌ BLUFFS activo no se pudo ejecutar contra {mac}.\n"
+                f"   Causa: {reason or 'hardware requerido no disponible'}\n\n"
                 f"   Para ataque real necesitas:\n"
                 f"   1. nRF52840 dongle o TP-Link UB500 con DarkFirmware\n"
                 f"   2. scapy instalado (pip install scapy)\n"
@@ -469,7 +464,8 @@ class Bluffs(BaseModule):
                 f"   Web: https://www.bluffs-attack.com/"
             ),
         })
-        self.result["success"] = True
+        self.result["success"] = False
+        self.result["error"] = f"BLUFFS activo no disponible: {reason or 'sin hardware compatible'}"
         return self.result
 
     def _scan_services(self, mac: str) -> dict:

@@ -14,7 +14,7 @@ from bluesky.utils.format import (
     terminal_width
 )
 from bluesky.utils.network import mac_valid, mac_normalize
-from bluesky.utils.termux import is_termux
+from bluesky.utils.platform import is_termux
 
 
 class TestFormatUtils(unittest.TestCase):

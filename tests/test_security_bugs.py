@@ -452,7 +452,7 @@ class TestXssAutopilotReport(unittest.TestCase):
 
     def test_01_no_raw_script_tag_from_device_name(self):
         """Nombre hostil de dispositivo no genera <script> crudo."""
-        import os, re
+        import os
         from bluesky.modules.attacks.autopilot import Autopilot
 
         targets = [
