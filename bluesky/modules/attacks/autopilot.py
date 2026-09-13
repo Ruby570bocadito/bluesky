@@ -12,9 +12,10 @@ Requiere: ModuleEngine para cargar módulos dinámicamente.
 
 import sys
 import subprocess
-from typing import List, Dict
 from datetime import datetime
+from html import escape as html_escape
 from pathlib import Path
+from typing import List, Dict
 
 from bluesky.core.engine import BaseModule
 
@@ -300,9 +301,26 @@ class Autopilot(BaseModule):
 
     # ─── FASE 4: Reporte ──────────────────────────────────────────────
 
+    @staticmethod
+    def _esc(value) -> str:
+        """HTML-escape de cualquier valor (None, str, int, etc.).
+
+        Es obligatorio escapar TODO dato dinámico que venga de dispositivos
+        Bluetooth: el `name` anunciado por un dispositivo puede contener
+        HTML/JS hostil (p.ej. '<script>...</script>') y, si se interpola
+        directo, se ejecutaría al abrir el reporte autopilot en el navegador.
+        """
+        return html_escape(str(value) if value is not None else "", quote=True)
+
     def _phase_report(self, targets: List[dict], results: Dict[str, List[dict]],
                       all_vulns: dict) -> str:
-        """Genera reporte HTML del autopilot."""
+        """Genera reporte HTML del autopilot.
+
+        Todos los datos (nombres de dispositivo, MACs, IDs de vuln, módulos)
+        se escapan con html.escape antes de interpolarse. Sin esto, un
+        dispositivo Bluetooth malicioso con un nombre como
+        '<img src=x onerror=alert(1)>' ejecutaría JS al abrir el reporte.
+        """
         print("  [4/4] 📊 Generando reporte...")
 
         report_dir = Path("reports")
@@ -314,15 +332,15 @@ class Autopilot(BaseModule):
         for t in targets:
             vulns = all_vulns.get(t["mac"], [])
             found = [v for v in vulns if v.get("vulnerable")]
-            vuln_str = ", ".join(v["id"] for v in found[:5])
+            vuln_str = ", ".join(self._esc(v.get("id", "")) for v in found[:5])
             if len(found) > 5:
-                vuln_str += f" y {len(found)-5} más"
+                vuln_str += f" y {self._esc(len(found)-5)} más"
 
             target_rows += f"""
             <tr>
-                <td>{t['name']}</td>
-                <td><code>{t['mac']}</code></td>
-                <td>{len(found)}</td>
+                <td>{self._esc(t.get('name', ''))}</td>
+                <td><code>{self._esc(t.get('mac', ''))}</code></td>
+                <td>{self._esc(len(found))}</td>
                 <td>{vuln_str or 'Ninguna'}</td>
             </tr>"""
 
@@ -331,11 +349,12 @@ class Autopilot(BaseModule):
             for r in module_results:
                 color = "green" if r.get("success") else "orange"
                 status_icon = "✅" if r.get("success") else "⚠️"
+                status_text = "Éxito" if r.get("success") else "Completado"
                 result_rows += f"""
             <tr>
-                <td><code>{mac}</code></td>
-                <td>{r['module']}</td>
-                <td style="color:{color}">{status_icon} {'Éxito' if r.get('success') else 'Completado'}</td>
+                <td><code>{self._esc(mac)}</code></td>
+                <td>{self._esc(r.get('module', ''))}</td>
+                <td style="color:{self._esc(color)}">{status_icon} {self._esc(status_text)}</td>
             </tr>"""
 
         html = f"""<!DOCTYPE html>

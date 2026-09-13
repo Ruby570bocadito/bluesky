@@ -4,16 +4,57 @@ Permite guardar/cargar el estado de una auditoría.
 """
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List
+
+
+# Patrón seguro para nombres de sesión: solo alfanuméricos, guion, guion bajo y punto.
+# Sin barras, sin "..", sin caracteres nulos. Evita path traversal y nombres hostiles.
+_SAFE_SESSION_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _sanitize_session_name(name: str) -> str:
+    """Valida y normaliza un nombre de sesión.
+
+    Bloquea path traversal (../), separadores de ruta (/, \\), bytes nulos y
+    cualquier carácter no whitelisted. Si el nombre no es seguro, lo sustituye
+    por uno seguro derivado del original (sustituyendo caracteres inválidos).
+
+    Args:
+        name: Nombre crudo proporcionado por el usuario/CLI.
+
+    Returns:
+        Nombre seguro listo para usarse como nombre de archivo.
+    """
+    if not isinstance(name, str):
+        return "default"
+    # Quitar bytes nulos siempre (defensa en profundidad aunque el regex ya los peta)
+    name = name.replace("\x00", "")
+    # Rechazar explícitamente cualquier separador de ruta o intento de traversal
+    if "/" in name or "\\" in name or ".." in name or name in ("", ".", ".."):
+        # Sustituir caracteres no whitelisted por '_' en lugar de fallar,
+        # para no romper la UX con sesiones nombradas por el usuario con espacios
+        # u otros caracteres legítimos pero no whitelisted.
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", name).strip("._")
+        return safe or "default"
+    # Cumple el whitelist
+    if _SAFE_SESSION_NAME.match(name):
+        return name
+    # Fallback: sustituir cualquier cosa no whitelisted
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", name).strip("._")
+    return safe or "default"
 
 
 class Session:
     """Gestiona una sesión de auditoría Bluetooth."""
 
     def __init__(self, name: str = "default", base_dir: str = None):
-        self.name = name
+        # El nombre se sanea ANTES de construir el path: sin esto, un
+        # name='../../../tmp/evil' permitiría escribir JSON fuera del
+        # directorio de sesiones (path traversal).
+        self.name = _sanitize_session_name(name)
         self.created_at = datetime.now().isoformat()
         self.updated_at = self.created_at
         self.targets: List[dict] = []
@@ -27,7 +68,8 @@ class Session:
             self.base_dir = Path.home() / ".bluesky" / "sessions"
 
         self.base_dir.mkdir(parents=True, exist_ok=True)
-        self.session_file = self.base_dir / f"{name}.json"
+        # La ruta del archivo se construye solo con self.name ya saneado.
+        self.session_file = self.base_dir / f"{self.name}.json"
 
     def add_target(self, mac: str, name: str = "", rssi: int = 0, **extra):
         """Agrega un objetivo a la sesión."""
@@ -88,8 +130,19 @@ class Session:
             (una sesión corrupta no debe crashear la consola al arrancar).
         """
         if name:
-            self.name = name
-            self.session_file = self.base_dir / f"{name}.json"
+            # Saneamiento defensivo también al cargar: aunque __init__ ya
+            # sanea, este método puede recibir un name nuevo.
+            self.name = _sanitize_session_name(name)
+            self.session_file = self.base_dir / f"{self.name}.json"
+        # Defensa en profundidad: aunque el nombre esté saneado, comprobar
+        # que la ruta resuelta sigue dentro de base_dir antes de leer.
+        try:
+            resolved = self.session_file.resolve()
+            base_resolved = self.base_dir.resolve()
+            if base_resolved not in resolved.parents and resolved != base_resolved:
+                return False
+        except (OSError, RuntimeError):
+            return False
 
         if not self.session_file.exists():
             return False

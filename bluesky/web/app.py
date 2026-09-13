@@ -680,4 +680,22 @@ def run_web_server(port: int = 5000, host: str = "127.0.0.1", debug: bool = Fals
 
 
 if __name__ == "__main__":
-    run_web_server(port=5000, debug=True)
+    # debug=True por defecto en el __main__ era peligroso: el debugger
+    # interactiva de Werkzeug permite ejecutar código Python arbitrario
+    # desde el navegador si la app está accesible (incluso en 127.0.0.1,
+    # cualquier web maliciosa con un payload POST al /console puede pwnear).
+    # El modo debug debe ser opt-in explícito.
+    import argparse
+    parser = argparse.ArgumentParser(description="bluesky Web Dashboard")
+    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--debug", action="store_true",
+                        help="Habilitar modo debug de Flask (NO usar en producción)")
+    parser.add_argument("--open", dest="open_browser", action="store_true")
+    args = parser.parse_args()
+    run_web_server(
+        port=args.port,
+        host=args.host,
+        debug=args.debug,  # antes era True hardcoded
+        open_browser=args.open_browser,
+    )
