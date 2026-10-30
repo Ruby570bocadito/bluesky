@@ -109,8 +109,10 @@ class TestEngineRunDispatch(unittest.TestCase):
 
         # Pasar target válido para que la validación MAC de BaseModule
         # no bloquee antes de llegar al check de root.
+        # create=True: en Windows os.geteuid no existe; patch debe poder
+        # crear el atributo para simular una plataforma no-posix.
         with mock.patch.object(os, "name", "nt"), \
-             mock.patch.object(os, "geteuid", no_euid):
+             mock.patch.object(os, "geteuid", no_euid, create=True):
             ok, msg = L2CAPFuzz(target="00:11:22:33:44:55").check_prerequisites()
         self.assertFalse(ok)
         self.assertIn("root", msg.lower())

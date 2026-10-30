@@ -147,7 +147,7 @@ class TestCLIIntegration(unittest.TestCase):
     def test_12_cli_route_registered(self):
         from bluesky import cli as cli_mod
         self.assertTrue(hasattr(cli_mod, "cmd_educate"))
-        src = Path(cli_mod.__file__).read_text()
+        src = Path(cli_mod.__file__).read_text(encoding="utf-8")
         self.assertIn('"educate": lambda: cmd_educate(args)', src)
         self.assertIn('"educate"', src)  # en no_banner también
 

@@ -85,6 +85,9 @@ class PluginLoader:
     def __init__(self, extra_paths: Optional[List[str]] = None):
         self._plugins: Dict[str, PluginInfo] = {}
         self._module_classes: Dict[str, Type] = {}
+        # Cache de módulos ya importados por ruta, para no ejecutar el código
+        # del plugin dos veces (descubrimiento + carga).
+        self._module_cache: Dict[str, Any] = {}
         self._extra_paths = extra_paths or []
 
         # Directorios de búsqueda
@@ -208,15 +211,21 @@ class PluginLoader:
                 module_name = f"plugins.{filepath.stem}"
                 return importlib.import_module(module_name)
 
-            # Archivo .py suelto
+            # Archivo .py suelto. Importar un plugin ejecuta su código, así
+            # que cacheamos por ruta resuelta: el descubrimiento y la carga
+            # posterior reutilizan el mismo módulo en lugar de ejecutarlo dos
+            # veces.
+            cache_key = str(filepath.resolve())
+            if cache_key in self._module_cache:
+                return self._module_cache[cache_key]
+
             module_name = filepath.stem
             spec = importlib.util.spec_from_file_location(module_name, str(filepath))
             if spec is None or spec.loader is None:
                 return None
             module = importlib.util.module_from_spec(spec)
-            # No ejecutar el módulo aún (solo extraemos PLUGIN_INFO)
-            # Necesitamos ejecutarlo para obtener PLUGIN_INFO
             spec.loader.exec_module(module)
+            self._module_cache[cache_key] = module
             return module
         except Exception:
             return None

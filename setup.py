@@ -43,7 +43,7 @@ setup(
         "Topic :: Security",
         "Intended Audience :: Information Technology",
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.10",
     install_requires=[
         "rich>=10.0.0",
         "pyserial>=3.5",

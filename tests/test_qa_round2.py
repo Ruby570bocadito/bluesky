@@ -100,9 +100,14 @@ class TestUsbProductCheck(unittest.TestCase):
 
     def test_07_ubluetooth_dongle_requirement_does_not_error(self):
         """El check 'ubluetooth_dongle' no debe terminar en 'Error al verificar'."""
-        ok, msg = hw.HardwareDetector.check_hardware_requirement(
-            "ubluetooth_dongle")
-        self.assertIn("No disponible", msg)  # sin dongle en CI/entorno de test
+        # Forzar ausencia de dongle para que el test sea determinista aunque
+        # la máquina de desarrollo tenga un adaptador USB real (p.ej. RTL8761).
+        with mock.patch.object(hw, "_check_usb_vendor", return_value=False), \
+             mock.patch.object(hw, "_check_usb_product", return_value=False):
+            ok, msg = hw.HardwareDetector.check_hardware_requirement(
+                "ubluetooth_dongle")
+        self.assertFalse(ok)
+        self.assertIn("No disponible", msg)
         self.assertNotIn("Error al verificar", msg)
 
 

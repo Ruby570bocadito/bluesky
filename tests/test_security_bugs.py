@@ -344,7 +344,7 @@ class TestCmdReportPayload(unittest.TestCase):
             exit_code = cmd_report(["--txt", "-o", output_file])
             self.assertEqual(exit_code, 0)
 
-            content = open(output_file).read()
+            content = open(output_file, encoding="utf-8").read()
             # Sesión con nombre
             self.assertIn("Session:", content)
             self.assertIn("default", content)
@@ -387,7 +387,7 @@ class TestCmdReportPayload(unittest.TestCase):
             exit_code = cmd_report(["--txt", "-o", output_file])
             self.assertEqual(exit_code, 0)
 
-            content = open(output_file).read()
+            content = open(output_file, encoding="utf-8").read()
             # Debe ser texto plano (no HTML con <!DOCTYPE)
             self.assertNotIn("<!DOCTYPE", content)
             self.assertIn("BLUESKY - BLUETOOTH AUDIT REPORT", content)
@@ -477,7 +477,7 @@ class TestXssAutopilotReport(unittest.TestCase):
         a = Autopilot()
         report_path = a._phase_report(targets, results, all_vulns)
         try:
-            content = open(report_path).read()
+            content = open(report_path, encoding="utf-8").read()
             # Ninguno de estos patrones crudos debe aparecer
             for pattern in [
                 '<script>alert', '<img src=x onerror',
@@ -527,7 +527,7 @@ class TestXssVulnScannerReport(unittest.TestCase):
 
         report_path = v._generate_report(target, all_vulns, found, device_info)
         try:
-            content = open(report_path).read()
+            content = open(report_path, encoding="utf-8").read()
             # Ninguno de estos patrones crudos debe aparecer
             for pattern in [
                 '<script>alert', '<img src=x onerror',
@@ -834,7 +834,7 @@ class TestEndToEndHostileData(unittest.TestCase):
         report_path = v._generate_report(
             'AA:BB:CC:DD:EE:FF', [], found, device_info)
         try:
-            content = open(report_path).read()
+            content = open(report_path, encoding="utf-8").read()
             # Verificar que el JS hostil NO está crudo
             self.assertNotIn('<script>fetch', content,
                             'JS hostil no escapado en nombre de dispositivo')
@@ -868,7 +868,7 @@ class TestEndToEndHostileData(unittest.TestCase):
         a = Autopilot()
         report_path = a._phase_report(targets, results, all_vulns)
         try:
-            content = open(report_path).read()
+            content = open(report_path, encoding="utf-8").read()
             self.assertNotIn('<script>alert("pwned")</script>', content,
                             'JS hostil no escapado en vuln ID')
             self.assertIn('&lt;script&gt;alert', content)

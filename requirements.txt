@@ -1,47 +1,42 @@
 # =============================================================================
-# Bluesky - Dependencias Python
+# bluesky — Python dependencies
 # =============================================================================
-# Instalación: pip install -r requirements.txt
+# Install:  pip install -r requirements.txt
 #
-# O usando extras (definidos en setup.py):
-#   pip install bluesky[full]    # BLE + Web + todo
-#   pip install bluesky[web]     # Solo web dashboard
-#   pip install bluesky[ble]     # Solo Bluetooth LE
-#   pip install bluesky[dev]     # Desarrollo
+# This file installs the FULL experience (equivalent to `pip install .[full]`
+# plus the test tooling). The dependency layers mirror setup.py:
 #
-# Todas las dependencias listadas se usan directamente por el código:
-#   rich        → CLI, consola REPL y modo educativo (bluesky/cli.py, console.py)
-#   pyserial    → shell RFCOMM e inyección AT (modules/exploits, bluebugging)
-#   flask       → dashboard web (bluesky/web/app.py)
-#   bleak       → escaneo BLE cross-platform (device_scanner, blueborne, btspam)
-#   scapy       → packet crafting (KNOB, BLUFFS, SweynTooth, Crackle, ...)
-#   cryptography→ cifrados BLE (crackle)
-#   pytest*     → suite de tests offline (tests/)
+#   core   (install_requires) → rich, pyserial            — always required
+#   [web]                     → flask                     — web dashboard
+#   [ble]                     → bleak                     — BLE scanning
+#   [full]                    → bleak, scapy, cryptography, flask
+#   [dev]                     → pytest, pytest-cov
+#
+# Modules degrade gracefully when an optional dependency is missing: they
+# report what is required instead of failing (see each module's `info`).
 
-# ─── CLI / consola ───────────────────────────────────────────────────────
-rich>=10.0.0
+# ─── Core (always required) ─────────────────────────────────────────────────
+rich>=10.0.0           # CLI, REPL console and educational mode
+pyserial>=3.5          # RFCOMM shell and AT-command injection
 
-# ─── Comunicación serie ────────────────────────────────────────────────────
-pyserial>=3.5
-
-# ─── Web Dashboard ──────────────────────────────────────────────────────────
+# ─── Web dashboard ([web]) ──────────────────────────────────────────────────
 flask>=3.0.0
 
-# ─── Bluetooth (obligatorio para funcionalidad real) ────────────────────────
-bleak>=0.14.0          # BLE cross-platform
-scapy>=2.4.5           # Packet crafting (KNOB, BLUFFS, BTLEJack, SweynTooth, Crackle)
-cryptography>=3.4.0    # Criptografía BLE (Crackle, cifrados)
+# ─── Bluetooth stacks / packet crafting ([ble], [full]) ─────────────────────
+bleak>=0.14.0          # BLE, cross-platform (device_scanner, blueborne, btspam)
+scapy>=2.4.5           # Packet crafting (KNOB, BLUFFS, SweynTooth, Crackle, ...)
+cryptography>=3.4.0    # BLE crypto (Crackle: real SMP / AES-128)
 
-# ─── Testing ──────────────────────────────────────────────────────────────
+# ─── Testing ([dev]) ────────────────────────────────────────────────────────
 pytest>=7.0
 pytest-cov>=4.0
 
-# ─── Opcionales (instalar si es necesario) ─────────────────────────────────
-# pybluez>=0.22        # Bluetooth Classic (solo Linux legacy, no recomendado)
-# pycryptodome>=3.0    # Alternativa cryptography (AES, ECC)
+# ─── Optional (install manually if needed) ──────────────────────────────────
+# pybluez>=0.22        # Bluetooth Classic (Linux legacy only)
+# pycryptodome>=3.0    # Alternative to cryptography
 
-# ─── Notas de compatibilidad ──────────────────────────────────────────────
-# Windows: Usar bleak para BLE. PyBluez no funciona en Windows moderno.
-# Linux:   Usar BlueZ tools (bluetoothctl, hciconfig). Scapy para paquetes.
-# Termux:  Usar Termux:API (termux-bluetooth-*). Fallback a BlueZ tools.
-# WSL:     No tiene acceso a hardware Bluetooth. Usar modo --dry-run.
+# ─── Compatibility notes ────────────────────────────────────────────────────
+# Windows: use bleak for BLE (PyBluez does not work on modern Windows).
+# Linux:   BlueZ tools (bluetoothctl, hciconfig) + scapy for packets.
+# Termux:  Termux:API (termux-bluetooth-*), falling back to BlueZ tools.
+# WSL:     no Bluetooth hardware access.

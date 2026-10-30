@@ -1,64 +1,67 @@
-<p align="center">
-  <img src="docs/assets/banner.png" alt="bluesky — Bluetooth Security Auditing Framework" width="100%">
-</p>
+# bluesky
 
-<p align="center">
-  <strong>A Metasploit-style Bluetooth security auditing framework, written in Python.</strong><br>
-  BR/EDR &amp; BLE scanners · 21 attack &amp; exploit modules · 13+ CVE checks · REPL console · web dashboard · <strong>zero simulated results</strong>
-</p>
+**A modular, Metasploit-style framework for auditing Bluetooth Classic (BR/EDR) and BLE devices.**
 
-<p align="center">
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&amp;logo=python&amp;logoColor=white" alt="Python 3.10+"></a>
-  <a href="https://github.com/Ruby570bocadito/bluesky/actions"><img src="https://img.shields.io/github/actions/workflow/status/Ruby570bocadito/bluesky/ci.yml?style=flat-square&amp;label=CI&amp;branch=main" alt="CI status"></a>
-  <img src="https://img.shields.io/badge/tests-424%20offline-3fb950?style=flat-square" alt="424 offline tests">
-  <a href="#compatibility"><img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20Termux-6e7681?style=flat-square" alt="Platforms"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Ruby570bocadito/bluesky?style=flat-square" alt="MIT License"></a>
-  <img src="https://img.shields.io/github/stars/Ruby570bocadito/bluesky?style=flat-square&amp;color=f1c40f" alt="GitHub stars">
-</p>
+Discover nearby devices, enumerate their services, check them against a catalog of known
+vulnerabilities, and run proof-of-concept modules following a familiar `use → set → run`
+workflow — from the CLI, an interactive REPL, or a web dashboard. Every audit is recorded
+into a session and can be exported as TXT, HTML, or JSON.
+
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![CI](https://img.shields.io/github/actions/workflow/status/Ruby570bocadito/bluesky/ci.yml?style=flat-square&label=CI&branch=main)](https://github.com/Ruby570bocadito/bluesky/actions)
+![Tests](https://img.shields.io/badge/tests-424%20offline-3fb950?style=flat-square)
+[![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20Termux-6e7681?style=flat-square)](#compatibility)
+[![License: MIT](https://img.shields.io/github/license/Ruby570bocadito/bluesky?style=flat-square)](LICENSE)
+
+> **Authorized use only.** Run bluesky exclusively against devices and networks you own or
+> have explicit written permission to test. The authors accept no liability for misuse.
 
 ---
 
-## Demo
+## Design principles
+
+- **No fabricated results.** A module does only what the available hardware, tools, and
+  permissions actually allow. When something is missing, it reports `success=false` and
+  states exactly what is required — it never invents findings.
+- **Real primitives.** Advanced modules delegate to reference tooling (`btlejack`,
+  `hcidump`, `sdptool`, PyBluez) and BLE key cracking uses the real SMP algorithm
+  (AES-128 via `cryptography`), not placeholders.
+- **Offline by default.** The web dashboard and module catalog ship with no CDNs, no
+  external fonts, and no outbound calls.
+- **Defender-oriented.** Every module includes an educational mode explaining what it does,
+  how it works step by step, its impact, and how to mitigate it.
+
+## Workflow
+
+Four phases, each feeding the next, all recorded into the session:
 
 <p align="center">
-  <img src="docs/assets/demo_console.gif" alt="Live bluesky console session — search modules, use KNOB, show options" width="720">
-</p>
-<p align="center"><em>Real REPL session (v0.6.1): search the catalog, load <code>knob</code> (CVE-2019-9506), inspect its options and leave — nothing staged.</em></p>
-
-## What is bluesky?
-
-**bluesky** is a modular framework for auditing **Bluetooth Classic and BLE devices** in an organized, repeatable way: discover nearby devices, enumerate their services, check them against a catalog of known vulnerabilities (KNOB, BIAS, BLUFFS, BlueBorne, SweynTooth…) and run proof-of-concept modules following the Metasploit-style `use → set → run` flow. The whole cycle is recorded into sessions and can be exported as TXT, HTML or JSON reports.
-
-**No smoke and mirrors: modules only do what the hardware allows.** When an adapter, a tool or a permission is missing, the module says so clearly and tells you exactly what you need to run the real attack — it never invents results. Advanced modules delegate to real reference tools (`btlejack`, `hcidump`, `sdptool`, PyBlueZ) and BLE key cracking uses the real SMP algorithm (AES-128 via `cryptography`).
-
-It is designed as a **training and authorized-audit tool**: every module ships with an educational mode that explains what it does, how it works step by step and how to mitigate it. The web dashboard and the module catalog are 100% offline — no CDNs, no external calls.
-
-> ⚠️ **Ethical use.** Run bluesky only against devices and networks you have explicit written permission to test. The author is not responsible for misuse.
-
-## How it works
-
-From discovery to evidence in four phases — each step feeds the next, everything is recorded into the session, and the whole audit can be driven by a single command:
-
-<p align="center">
-  <img src="docs/assets/pipeline.png" alt="bluesky pipeline: scan → detect → attack → report" width="600">
+  <img src="docs/assets/pipeline.png" alt="scan → detect → attack → report" width="560">
 </p>
 
-Autopilot picks modules automatically based on the vulnerabilities it finds (`detect` only reports, `attack` chains modules against a target, `full` runs the end-to-end audit) and every module can still be run à la carte from the CLI, the REPL console or the web dashboard.
+The autopilot selects modules automatically from the vulnerabilities it detects
+(`detect` reports only, `attack` chains modules against a target, `full` runs end to end).
+Any module can still be run individually from the CLI, the REPL, or the dashboard.
 
 ## Features
 
-- **3 scanners** — BR/EDR + BLE discovery, SDP service enumeration and vulnerability analysis (13+ CVE-backed checks).
-- **21 attack/exploit modules** — KNOB, BIAS, BLUFFS, BlueBorne, BlueFrag, BLESA, SweynTooth, WhisperPair, Crackle, BTLEJack, BlueSmack, keystroke injection, L2CAP fuzzing and an RFCOMM shell.
-- **Metasploit-style REPL console** — contextual prompt, tab completion, favorites and persistent sessions.
-- **Modern CLI** — per-command help, consistent exit codes (0/1/2), `--json` output for scripting, `--no-color` and a silent-by-default log with `--verbose`.
-- **OUI vendor identification** — every discovered device is annotated with its manufacturer from the MAC prefix (offline database).
-- **Honest contract** — no hardware or missing tools → `success=false` plus the exact requirements. Zero fabricated data.
-- **Real SMP cracking** — Crackle captures with `hcidump`, recovers the LTK from `SM_Encryption_Information` and derives the STK with the real `s1()` = AES-128.
-- **Autopilot** — automated 4-phase pipeline: scan → vulnerability detection → attack chain → report.
-- **Educational mode** — every module documented: what it is, how it works, its impact and mitigations.
-- **CSV/JSON export** — `bluesky scan --export devices.csv`, plus a one-click export in the web UI.
-- **Working sample plugin** — `plugins/oui_lookup.py` showcases the plugin system with a real utility.
-- **Cross-platform** — Linux (BlueZ), Windows, Termux (Android) and WSL, with automatic backend detection.
+- **3 scanners** — BR/EDR + BLE discovery, SDP service enumeration, and vulnerability
+  analysis (13+ CVE-backed checks).
+- **21 attack/exploit modules** — KNOB, BIAS, BLUFFS, BlueBorne, BlueFrag, BLESA,
+  SweynTooth, WhisperPair, Crackle, BTLEJack, BlueSmack, keystroke injection, L2CAP
+  fuzzing, and an RFCOMM shell.
+- **REPL console** — contextual prompt, tab completion, favorites, and persistent sessions.
+- **Scriptable CLI** — per-command help, consistent exit codes (`0`/`1`/`2`), `--json`
+  output, `--no-color`, and a silent-by-default log with `--verbose`.
+- **OUI vendor lookup** — every discovered device is annotated with its manufacturer from
+  the MAC prefix, using an offline database.
+- **Autopilot** — automated scan → detect → attack → report pipeline.
+- **Exports** — CSV/JSON from the CLI (`bluesky scan --export devices.csv`) and one-click
+  export from the web UI.
+- **Plugin system** — drop a module into `plugins/`; `plugins/oui_lookup.py` is a working
+  example.
+- **Cross-platform** — Linux (BlueZ), Windows (WinRT/Bleak), Termux (Android), and WSL,
+  with automatic backend detection.
 
 ## Installation
 
@@ -67,37 +70,36 @@ git clone https://github.com/Ruby570bocadito/bluesky.git
 cd bluesky
 pip install -r requirements.txt
 
-# (optional) install as a global command
+# optional: install as a global command
 pip install .
 ```
 
-| Platform | Install |
-|----------|---------|
-| Linux / macOS | `pip install -r requirements.txt` |
-| Termux (Android) | `bash scripts/install_termux.sh` |
-| Windows | `scripts/install_windows.ps1` |
-| Docker | `docker-compose up` |
+| Platform          | Install                                 |
+|-------------------|-----------------------------------------|
+| Linux / macOS     | `pip install -r requirements.txt`       |
+| Termux (Android)  | `bash scripts/install_termux.sh`        |
+| Windows           | `scripts/install_windows.ps1`           |
+| Docker            | `docker-compose up`                     |
 
-Optional dependencies depending on what you want to run (documented inside each module): `scapy` (active attacks), `pybluez` (BlueFrag L2CAP send), `cryptography` (Crackle AES), the `btlejack` tool (BLE hijacking) and `bluez-hcidump` (captures).
+Some modules need extra tooling (documented in each module's `info`): `scapy` for active
+attacks, `pybluez` for BlueFrag L2CAP sends, `cryptography` for Crackle (AES), the
+`btlejack` tool for BLE hijacking, and `bluez-hcidump` for captures.
 
 ## Quick start
 
 ```bash
-bluesky status                          # Bluetooth hardware status
-bluesky scan --ble --export devices.csv # scan and export to CSV
-bluesky vuln AA:BB:CC:DD:EE:FF          # vulnerability analysis (13+ checks)
+bluesky status                           # Bluetooth hardware status
+bluesky scan --ble --export devices.csv  # scan and export to CSV
+bluesky vuln AA:BB:CC:DD:EE:FF           # vulnerability analysis (13+ checks)
 bluesky attack bluejacking AA:BB:CC:DD:EE:FF
-bluesky auto --mode detect              # automated pipeline
-bluesky console                         # interactive REPL
-bluesky web --port 5000 --open          # web dashboard
+bluesky auto --mode detect               # automated pipeline
+bluesky console                          # interactive REPL
+bluesky web --port 5000 --open           # web dashboard
 ```
 
-<p align="center">
-  <img src="docs/assets/demo_cli.gif" alt="bluesky CLI — module catalog and module intel" width="640">
-</p>
-
 Global options: `--config <file>` · `--json` · `--no-color` · `-v/--verbose` · `--version`.
-Exit codes: `0` OK · `1` execution error · `2` usage error. Every command ships its own help: `bluesky scan --help`.
+Exit codes: `0` OK · `1` execution error · `2` usage error. Every command ships its own
+help (`bluesky scan --help`).
 
 ## CLI reference
 
@@ -108,22 +110,15 @@ Exit codes: `0` OK · `1` execution error · `2` usage error. Every command ship
 | `vuln <MAC> [--options JSON]` | Vulnerability analysis (13+ checks) |
 | `attack <module> [MAC]` | Run a module from the catalog |
 | `auto [MAC] [--mode detect\|attack\|full]` | 4-phase autopilot |
-| `spam <MAC\|all> [--method M] [--rate N]` | BTSpam: flooding (3 techniques) |
+| `spam <MAC\|all> [--method M] [--rate N]` | BTSpam flooding (3 techniques) |
 | `list` / `info <module>` | Module catalog and details |
 | `educate [module]` | Educational mode |
-| `status` | Adapter, capabilities and backends |
+| `status` | Adapter, capabilities, and backends |
 | `session list\|save\|load\|summary` | Session management |
 | `report [--html\|--json\|--txt] [-o FILE]` | Session report |
 | `config` / `plugin` / `web` / `console` | Configuration, plugins, dashboard, REPL |
 
-## Modules
-
-<details open>
-<summary><b>Module catalog (22 modules)</b> — click to collapse</summary>
-
-<p align="center">
-  <img src="docs/assets/cli/cli_list.png" alt="CLI — module catalog grouped by severity" width="680">
-</p>
+## Module catalog
 
 | Module | Type | Target | Description |
 |--------|------|--------|-------------|
@@ -132,7 +127,7 @@ Exit codes: `0` OK · `1` execution error · `2` usage error. Every command ship
 | `scanner/vuln` | Scanner | All | 13+ vulnerability checks |
 | `attack/knob` | Attack | BR/EDR | Entropy downgrade (CVE-2019-9506) |
 | `attack/bias` | Attack | BR/EDR | Identity impersonation (CVE-2020-10135) |
-| `attack/bluffs` | Attack | BR/EDR | Forward/Future Secrecy (CVE-2023-24023) |
+| `attack/bluffs` | Attack | BR/EDR | Forward/future secrecy (CVE-2023-24023) |
 | `attack/blueborne` | Attack | BR/EDR | RCE via the BT stack (CVE-2017-0781) |
 | `attack/bluefrag` | Attack | BLE | Android RCE (CVE-2020-0022) |
 | `attack/blesa` | Attack | BLE | Insecure connection re-establishment |
@@ -150,68 +145,69 @@ Exit codes: `0` OK · `1` execution error · `2` usage error. Every command ship
 | `exploit/rfcomm_shell` | Exploit | RFCOMM | Interactive shell |
 | `oui_lookup` *(plugin)* | Utility | MAC | Vendor by OUI (offline) |
 
+`bluesky list` groups the catalog by severity; `bluesky info <module>` shows CVEs, required
+hardware, and usage.
+
 <p align="center">
-  <img src="docs/assets/cli/cli_info_knob.png" alt="CLI — module intel for KNOB" width="680">
+  <img src="docs/assets/cli/cli_list.png" alt="CLI module catalog grouped by severity" width="680">
 </p>
-
-`bluesky list` groups the catalog by severity and `bluesky info <module>` shows CVEs, required hardware and usage.
-
-</details>
 
 ## Educational mode
 
-Every module documents **what it is, how it works step by step, its impact and how to mitigate it** — with a focus on the defender:
+Every module documents **what it is, how it works step by step, its impact, and how to
+mitigate it**, with a focus on the defender:
 
 ```bash
-bluesky educate              # index of contents
-bluesky educate knob         # KNOB (CVE-2019-9506) explained
-bluesky> educate bias        # from the REPL console
+bluesky educate          # index of contents
+bluesky educate knob     # KNOB (CVE-2019-9506) explained
+bluesky> educate bias    # from the REPL console
 ```
 
-Also available on the web UI: **Modules → knob → Educational mode**. Full catalog coverage (22 modules).
-
-<p align="center">
-  <img src="docs/assets/cli/cli_educate_knob.png" alt="CLI — KNOB educational mode" width="680">
-</p>
+Also available in the web UI under **Modules → knob → Educational mode**. Full catalog
+coverage (22 modules).
 
 ## Web dashboard
 
-A **minimalist dark-mode web UI**, 100% offline (no CDNs or external fonts), with safe rendering (`textContent`), CSRF middleware on POST endpoints and path-traversal protection on the reports API.
+A minimalist dark-mode UI, fully offline, with safe rendering (`textContent`), CSRF
+protection on mutating endpoints, optional token authentication, and path-traversal
+protection on the reports API.
 
 ```bash
 bluesky web --port 5000 --open
+# expose on the network with authentication:
+bluesky web --host 0.0.0.0 --token "$(openssl rand -hex 16)"
 ```
 
-- **Live dashboard** — module stats, severity distribution and target types at a glance.
-- **Module catalog** — filter by name/type with detail, options, CVEs and references.
-- **Live scan** — inquiry/BLE or SDP/GATT enumeration from the browser, exportable to CSV in one click.
-- **Sessions, reports and logs** — built-in viewers with safe rendering.
+<p align="center">
+  <img src="docs/assets/web/web_dashboard.png" alt="Web dashboard" width="49%">
+  <img src="docs/assets/web/web_modules.png" alt="Module catalog" width="49%">
+</p>
 
-<p align="center">
-  <img src="docs/assets/web/web_dashboard.png" alt="Web dashboard — live status" width="49%">
-  <img src="docs/assets/web/web_modules.png" alt="Web — module catalog" width="49%">
-</p>
-<p align="center">
-  <img src="docs/assets/web/web_scan.png" alt="Web — live scanning from the browser" width="49%">
-  <img src="docs/assets/web/web_module_knob.png" alt="Web — module detail with educational mode" width="49%">
-</p>
+- **Live dashboard** — module stats, severity distribution, and target types.
+- **Module catalog** — filter by name/type, with details, options, CVEs, and references.
+- **Live scan** — inquiry/BLE or SDP/GATT enumeration from the browser, exportable to CSV.
+- **Sessions, reports, and logs** — built-in viewers with safe rendering.
 
 ## Compatibility
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| Linux (BlueZ) | ✅ Full | `hcitool`, `gatttool`, `hcidump`; CSR dongles supported |
-| Windows | ✅ Full | Native backend via WinRT/Bleak |
-| Termux (Android) | ✅ Full | `termux-bluetooth` backend |
-| WSL | ⚠️ Limited | No direct USB Bluetooth access |
+| Linux (BlueZ) | Full | `hcitool`, `gatttool`, `hcidump`; CSR dongles supported |
+| Windows | Full | Native backend via WinRT/Bleak |
+| Termux (Android) | Full | `termux-bluetooth` backend |
+| WSL | Limited | No direct USB Bluetooth access |
 
-## Tests &amp; quality
+## Testing
 
 ```bash
 python -m pytest tests/ -q     # 424 tests, 100% offline
 ```
 
-CI runs on GitHub Actions: the full suite on every push plus `ruff` linting. Regression coverage lives in `tests/test_qa_*.py` (path traversal, XSS, CSRF, module contracts, JSON result serialization).
+The suite is fully offline: no hardware, no network, and no real devices are touched —
+backends and system tools are mocked. CI runs on GitHub Actions (full suite plus `ruff`
+linting on every push). Regression coverage lives in `tests/test_qa_*.py` and
+`tests/test_security_bugs.py` (path traversal, XSS, CSRF, module contracts, result
+serialization).
 
 ## Project structure
 
@@ -222,22 +218,19 @@ bluesky/
 │   ├── modules/       # scanners/ · attacks/ · exploits/
 │   ├── utils/         # config, OUI, CSV, platform backends
 │   └── web/           # Flask dashboard (app + templates + static)
-├── plugins/           # oui_lookup.py: sample plugin (real functionality)
+├── plugins/           # oui_lookup.py: sample plugin
 ├── scripts/           # installers (Linux/Windows/Termux), build, completions
 ├── tests/             # 424 offline tests
 └── docs/
-    ├── assets/        # banner, real GIF demos and screenshots (CLI & web)
-    └── ANALISIS_BLUETOOTH.md   # technical analysis: top 10 BT attacks
+    ├── assets/        # screenshots and the pipeline diagram
+    └── ANALISIS_BLUETOOTH.md   # technical deep-dive: top 10 BT attacks (Spanish)
 ```
 
 ## Learn more
 
-- [Deep-dive: Top 10 Bluetooth attacks](docs/ANALISIS_BLUETOOTH.md) — the technical foundation behind the module catalog *(in Spanish)*.
+- [Deep-dive: Top 10 Bluetooth attacks](docs/ANALISIS_BLUETOOTH.md) — the technical
+  foundation behind the module catalog *(in Spanish)*.
 
 ## License
 
-[MIT](LICENSE) — free to use, modify and distribute.
-
-<div align="center">
-  <sub>Built by <a href="https://github.com/Ruby570bocadito">Ruby570bocadito</a> · <a href="https://github.com/Ruby570bocadito/bluesky/issues">Report an issue</a></sub>
-</div>
+Released under the [MIT License](LICENSE).
